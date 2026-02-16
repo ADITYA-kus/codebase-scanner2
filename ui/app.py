@@ -27,6 +27,7 @@ app = FastAPI(title="CodeMap AI UI")
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
 SEARCH_INDEX_CACHE: Dict[str, List[Dict[str, Any]]] = {}
+GRAPH_INDEX_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 def _load_json(path: str, default: Any) -> Any:
@@ -306,6 +307,66 @@ def _build_search_index(ctx: Dict[str, str]) -> List[Dict[str, Any]]:
         })
     SEARCH_INDEX_CACHE[cache_key] = items
     return items
+
+
+def _classify_symbol(fqn: str, explain: Dict[str, Any]) -> str:
+    if fqn.startswith("builtins."):
+        return "builtin"
+    if fqn in explain:
+        return "local"
+    if fqn.startswith("external::"):
+        return "external"
+    return "external"
+
+
+def _short_label(fqn: str) -> str:
+    if fqn.startswith("external::"):
+        return fqn.split("external::", 1)[1]
+    parts = fqn.split(".")
+    if len(parts) >= 2 and parts[-2][:1].isupper():
+        return f"{parts[-2]}.{parts[-1]}"
+    return parts[-1]
+
+
+def _build_graph_index(ctx: Dict[str, str]) -> Dict[str, Any]:
+    cache_key = ctx["repo_hash"]
+    resolved_mtime = os.path.getmtime(ctx["resolved_calls_path"]) if os.path.exists(ctx["resolved_calls_path"]) else -1
+    explain_mtime = os.path.getmtime(ctx["explain_path"]) if os.path.exists(ctx["explain_path"]) else -1
+    signature = f"{resolved_mtime}:{explain_mtime}"
+
+    cached = GRAPH_INDEX_CACHE.get(cache_key)
+    if cached and cached.get("signature") == signature:
+        return cached["index"]
+
+    explain = _load_json(ctx["explain_path"], {})
+    resolved_calls = _load_json(ctx["resolved_calls_path"], [])
+
+    callees_map: Dict[str, List[str]] = {}
+    callers_map: Dict[str, List[str]] = {}
+    edge_counts: Dict[tuple, int] = {}
+
+    for call in resolved_calls:
+        caller = call.get("caller_fqn")
+        if not caller:
+            continue
+        callee = call.get("callee_fqn")
+        if not callee:
+            raw_name = str(call.get("callee") or "<unknown>").strip()
+            callee = f"external::{raw_name}"
+
+        callees_map.setdefault(caller, []).append(callee)
+        callers_map.setdefault(callee, []).append(caller)
+        edge_key = (caller, callee)
+        edge_counts[edge_key] = edge_counts.get(edge_key, 0) + 1
+
+    index = {
+        "explain": explain,
+        "callees_map": callees_map,
+        "callers_map": callers_map,
+        "edge_counts": edge_counts,
+    }
+    GRAPH_INDEX_CACHE[cache_key] = {"signature": signature, "index": index}
+    return index
 
 
 def _normalize_ui_state(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -679,4 +740,123 @@ def api_search(
         "count": len(matched),
         "results": results,
         "truncated": len(matched) > limit,
+    }
+
+
+@app.get("/api/graph")
+def api_graph(
+    fqn: Optional[str] = Query(default=None),
+    file: Optional[str] = Query(default=None),
+    depth: int = Query(default=1, ge=1, le=3),
+    hide_builtins: bool = Query(default=True),
+    hide_external: bool = Query(default=True),
+    repo: Optional[str] = Query(default=None),
+):
+    ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
+    if not _has_analysis_cache(ctx):
+        return _missing_cache_response()
+
+    graph = _build_graph_index(ctx)
+    explain = graph["explain"]
+    callees_map = graph["callees_map"]
+    callers_map = graph["callers_map"]
+    edge_counts = graph["edge_counts"]
+
+    center_fqn = fqn.strip() if isinstance(fqn, str) else ""
+    file_rel = file.replace("\\", "/").lstrip("/") if isinstance(file, str) else ""
+    if not center_fqn and not file_rel:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "MISSING_GRAPH_TARGET"})
+
+    seed_nodes: set = set()
+    mode = "symbol"
+    center = center_fqn
+    if file_rel:
+        mode = "file"
+        center = file_rel
+        target_abs = os.path.abspath(os.path.join(ctx["repo_dir"], file_rel))
+        for sym_fqn, item in explain.items():
+            loc_file = (item.get("location") or {}).get("file", "")
+            if loc_file and _norm(loc_file) == _norm(target_abs):
+                seed_nodes.add(sym_fqn)
+        if not seed_nodes:
+            return {
+                "ok": True,
+                "mode": "file",
+                "center": center,
+                "depth": depth,
+                "seed_nodes": [],
+                "nodes": [],
+                "edges": [],
+            }
+    else:
+        seed_nodes.add(center_fqn)
+
+    visited = set(seed_nodes)
+    frontier = set(seed_nodes)
+    edges: set = set()
+
+    for _ in range(max(1, min(3, depth))):
+        next_frontier = set()
+        for node in frontier:
+            for callee in callees_map.get(node, []):
+                edges.add((node, callee))
+                if callee not in visited:
+                    next_frontier.add(callee)
+            for caller in callers_map.get(node, []):
+                edges.add((caller, node))
+                if caller not in visited:
+                    next_frontier.add(caller)
+        visited.update(next_frontier)
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    def _include(node_id: str) -> bool:
+        kind = _classify_symbol(node_id, explain)
+        if hide_builtins and kind == "builtin":
+            return False
+        if hide_external and kind == "external":
+            return False
+        return True
+
+    filtered_edges = [(src, dst) for (src, dst) in edges if _include(src) and _include(dst)]
+    node_ids = set()
+    for src, dst in filtered_edges:
+        node_ids.add(src)
+        node_ids.add(dst)
+    for seed in seed_nodes:
+        if _include(seed):
+            node_ids.add(seed)
+
+    nodes = []
+    for node_id in sorted(node_ids):
+        info = explain.get(node_id, {})
+        nodes.append({
+            "id": node_id,
+            "label": _short_label(node_id),
+            "subtitle": info.get("one_liner", ""),
+            "kind": _classify_symbol(node_id, explain),
+            "clickable": node_id in explain,
+            "location": (info.get("location") or {}),
+        })
+
+    edges_payload = [
+        {
+            "from": src,
+            "to": dst,
+            "count": int(edge_counts.get((src, dst), 1)),
+        }
+        for (src, dst) in sorted(filtered_edges, key=lambda x: (x[0], x[1]))
+    ]
+
+    return {
+        "ok": True,
+        "mode": mode,
+        "center": center,
+        "depth": depth,
+        "seed_nodes": sorted(seed_nodes),
+        "nodes": nodes,
+        "edges": edges_payload,
     }

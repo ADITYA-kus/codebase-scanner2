@@ -48,7 +48,30 @@
 
     <section class="panel">
       <h2>Symbol Intelligence</h2>
+      <div class="view-toggle">
+        <button id="tab-details" class="tab-btn active" type="button">Details</button>
+        <button id="tab-graph" class="tab-btn" type="button">Graph</button>
+      </div>
+      <div id="graph-controls" class="graph-controls hidden">
+        <label>Mode
+          <select id="graph-mode">
+            <option value="symbol" selected>Symbol</option>
+            <option value="file">File</option>
+          </select>
+        </label>
+        <label>Depth
+          <select id="graph-depth">
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+        <label><input id="graph-hide-builtins" type="checkbox" checked /> Hide builtins</label>
+        <label><input id="graph-hide-external" type="checkbox" checked /> Hide external</label>
+        <input id="graph-search" type="text" placeholder="Search graph nodes..." />
+      </div>
       <div id="symbol-view" class="content muted">Select a symbol to view summary and usages.</div>
+      <div id="graph-view" class="content muted hidden">Select a symbol to view graph.</div>
     </section>
   </main>
 

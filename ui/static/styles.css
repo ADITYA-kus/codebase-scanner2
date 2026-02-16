@@ -124,6 +124,45 @@ body {
   border-bottom: 1px solid #e4e9ef;
 }
 
+.view-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tab-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #334155;
+}
+
+.tab-btn.active {
+  background: #eef4ff;
+  border-color: #b8cdf5;
+  color: #173d7a;
+}
+
+.graph-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.graph-controls select,
+.graph-controls input[type="text"] {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: #fff;
+}
+
 .tree ul {
   list-style: none;
   margin: 0;
@@ -265,6 +304,90 @@ body {
   margin-bottom: 16px;
   background: #fff;
   transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.graph-card {
+  min-height: 180px;
+}
+
+.graph-legend {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.legend-item {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+
+.dot.local {
+  background: #2d6cdf;
+}
+
+.dot.builtin {
+  background: #7c8ea5;
+}
+
+.dot.external {
+  background: #a8b3bf;
+}
+
+.graph-edge-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.edge-arrow {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.graph-node {
+  border: 1px solid #dbe2ec;
+  border-radius: 8px;
+  padding: 5px 8px;
+  background: #fff;
+  min-width: 120px;
+}
+
+.graph-node.kind-local {
+  border-color: #c4d7fa;
+  background: #f7faff;
+}
+
+.graph-node.kind-builtin {
+  border-color: #d8dde5;
+  background: #f8fafc;
+}
+
+.graph-node.kind-external {
+  border-color: #dfe3e8;
+  background: #fafbfc;
+}
+
+.graph-node.graph-clickable {
+  cursor: pointer;
+}
+
+.graph-node.graph-clickable:hover {
+  border-color: #9ebaf0;
+  background: #eef4ff;
+}
+
+.graph-node.graph-match {
+  box-shadow: 0 0 0 2px rgba(52, 116, 231, 0.2);
 }
 
 .line {

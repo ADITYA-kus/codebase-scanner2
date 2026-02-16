@@ -1,15 +1,18 @@
 {
-  "last_symbol": "portfolio.developer-portfolios.src.alphabetical.find_duplicate_lines",
+  "last_symbol": "portfolio.developer-portfolios.src.alphabetical.convert_to_title_case",
   "recent_symbols": [
-    "portfolio.developer-portfolios.src.alphabetical.find_duplicate_lines",
+    "portfolio.developer-portfolios.src.alphabetical.convert_to_title_case",
+    "portfolio.developer-portfolios.src.alphabetical.main",
     "portfolio.developer-portfolios.src.alphabetical.sort_lists_alphabetically",
-    "portfolio.developer-portfolios.src.alphabetical.main"
+    "portfolio.developer-portfolios.src.alphabetical.find_duplicate_lines"
   ],
   "recent_files": [
+    "tailwind.config.js",
     "developer-portfolios/src/alphabetical.py",
     "developer-portfolios/assets/ASpittel_tweet.png",
-    "developer-portfolios/README.md",
-    "src/components/PublicationsSection.jsx"
+    "src/components/HeroSection.jsx",
+    "src/components/PublicationsSection.jsx",
+    "developer-portfolios/README.md"
   ],
-  "updated_at": "2026-02-16T12:27:00.962760Z"
+  "updated_at": "2026-02-16T14:24:32.412015Z"
 }

@@ -9,6 +9,15 @@
   const symbolViewEl = document.getElementById("symbol-view");
   const searchInputEl = document.getElementById("symbol-search-input");
   const searchResultsEl = document.getElementById("symbol-search-results");
+  const tabDetailsEl = document.getElementById("tab-details");
+  const tabGraphEl = document.getElementById("tab-graph");
+  const graphControlsEl = document.getElementById("graph-controls");
+  const graphViewEl = document.getElementById("graph-view");
+  const graphModeEl = document.getElementById("graph-mode");
+  const graphDepthEl = document.getElementById("graph-depth");
+  const graphHideBuiltinsEl = document.getElementById("graph-hide-builtins");
+  const graphHideExternalEl = document.getElementById("graph-hide-external");
+  const graphSearchEl = document.getElementById("graph-search");
   const recentSymbolsEl = document.getElementById("recent-symbols");
   const recentFilesEl = document.getElementById("recent-files");
   const recentSymbolsWrapEl = document.getElementById("recent-symbols-wrap");
@@ -27,6 +36,8 @@
   let recentSymbols = [];
   let recentFiles = [];
   let lastSymbol = "";
+  let activeTab = "details";
+  let graphDataCache = new Map();
 
   function withRepo(path) {
     return new URL(path, window.location.origin).toString();
@@ -90,12 +101,141 @@
     treeStatusEl.textContent = "";
     fileViewEl.classList.add("muted");
     symbolViewEl.classList.add("muted");
+    graphViewEl.classList.add("muted");
     fileViewEl.textContent = message || "Select a file from the tree.";
     symbolViewEl.textContent = "Select a symbol to view summary and usages.";
+    graphViewEl.textContent = "Select a symbol to view graph.";
     recentSymbols = [];
     recentFiles = [];
     lastSymbol = "";
     renderRecents();
+  }
+
+  function graphParams() {
+    return {
+      mode: String(graphModeEl && graphModeEl.value ? graphModeEl.value : "symbol"),
+      depth: Number(graphDepthEl && graphDepthEl.value ? graphDepthEl.value : 1),
+      hideBuiltins: !!(graphHideBuiltinsEl && graphHideBuiltinsEl.checked),
+      hideExternal: !!(graphHideExternalEl && graphHideExternalEl.checked),
+      search: String(graphSearchEl && graphSearchEl.value ? graphSearchEl.value : "").trim().toLowerCase(),
+    };
+  }
+
+  function setActiveTab(tab) {
+    activeTab = tab === "graph" ? "graph" : "details";
+    const isGraph = activeTab === "graph";
+    if (tabDetailsEl) tabDetailsEl.classList.toggle("active", !isGraph);
+    if (tabGraphEl) tabGraphEl.classList.toggle("active", isGraph);
+    if (symbolViewEl) symbolViewEl.classList.toggle("hidden", isGraph);
+    if (graphViewEl) graphViewEl.classList.toggle("hidden", !isGraph);
+    if (graphControlsEl) graphControlsEl.classList.toggle("hidden", !isGraph);
+    if (isGraph) {
+      loadGraph();
+    }
+  }
+
+  function renderGraphData(data) {
+    const p = graphParams();
+    const nodes = (data.nodes || []).slice();
+    const edges = (data.edges || []).slice();
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const center = data.center || activeSymbolFqn;
+    const mode = data.mode || "symbol";
+    const seedNodes = new Set(data.seed_nodes || []);
+
+    const matches = new Set(
+      !p.search
+        ? []
+        : nodes.filter((n) => n.id.toLowerCase().includes(p.search) || String(n.label || "").toLowerCase().includes(p.search)).map((n) => n.id)
+    );
+
+    const incoming = [];
+    const outgoing = [];
+    const internal = [];
+    for (const e of edges) {
+      if (mode === "file") {
+        const fromSeed = seedNodes.has(e.from);
+        const toSeed = seedNodes.has(e.to);
+        if (toSeed && !fromSeed) incoming.push(e);
+        else if (fromSeed && !toSeed) outgoing.push(e);
+        else if (fromSeed && toSeed) internal.push(e);
+      } else {
+        if (e.to === center) incoming.push(e);
+        if (e.from === center) outgoing.push(e);
+      }
+    }
+
+    function nodePill(nodeId) {
+      const n = byId.get(nodeId) || { id: nodeId, label: nodeId, kind: "external", clickable: false };
+      const cls = `graph-node kind-${n.kind} ${matches.has(nodeId) ? "graph-match" : ""} ${n.clickable ? "graph-clickable" : ""}`;
+      const subtitle = n.subtitle ? `<div class="path">${esc(n.subtitle)}</div>` : "";
+      return `<div class="${cls}" data-node-id="${esc(nodeId)}">
+        <div>${esc(n.label || nodeId)}</div>
+        ${subtitle}
+      </div>`;
+    }
+
+    graphViewEl.classList.remove("muted");
+    graphViewEl.innerHTML = `
+      <div class="card graph-card">
+        <div class="graph-legend">
+          <span class="legend-item"><span class="dot local"></span>Local</span>
+          <span class="legend-item"><span class="dot builtin"></span>Builtins</span>
+          <span class="legend-item"><span class="dot external"></span>External</span>
+        </div>
+        <div class="section-title">${mode === "file" ? "Center File" : "Center"}</div>
+        ${mode === "file" ? `<div class="path">${esc(center)}</div>` : nodePill(center)}
+        ${mode === "file" ? `<div class="path">Seed symbols: ${seedNodes.size}</div>` : ""}
+        <div class="divider"></div>
+        <div class="section-title">Incoming Callers (${incoming.length})</div>
+        ${incoming.length ? incoming.slice(0, 200).map((e) => `<div class="graph-edge-row">${nodePill(e.from)} <span class="edge-arrow">→</span> <span class="path">${esc(e.count)}x</span></div>`).join("") : "<div class='muted'>No incoming callers in current depth/filter.</div>"}
+        <div class="divider"></div>
+        <div class="section-title">Outgoing Callees (${outgoing.length})</div>
+        ${outgoing.length ? outgoing.slice(0, 200).map((e) => `<div class="graph-edge-row">${nodePill(e.to)} <span class="path">${esc(e.count)}x</span></div>`).join("") : "<div class='muted'>No outgoing callees in current depth/filter.</div>"}
+        ${mode === "file" ? `<div class="divider"></div><div class="section-title">Internal File Edges (${internal.length})</div>${internal.length ? internal.slice(0, 200).map((e) => `<div class="graph-edge-row">${nodePill(e.from)} <span class="edge-arrow">→</span> ${nodePill(e.to)} <span class="path">${esc(e.count)}x</span></div>`).join("") : "<div class='muted'>No internal edges in current depth/filter.</div>"}` : ""}
+        <div class="divider"></div>
+        <div class="section-title">Subgraph Stats</div>
+        <div class="path">Nodes: ${nodes.length} · Edges: ${edges.length} · Depth: ${data.depth}</div>
+      </div>
+    `;
+
+    graphViewEl.querySelectorAll(".graph-node.graph-clickable").forEach((el) => {
+      el.addEventListener("click", () => {
+        const next = el.getAttribute("data-node-id");
+        if (next) loadSymbol(next);
+      });
+    });
+  }
+
+  async function loadGraph(fqn) {
+    if (!graphViewEl) return;
+    const p = graphParams();
+    const graphMode = p.mode === "file" ? "file" : "symbol";
+    const anchor = graphMode === "file" ? activeFilePath : (fqn || activeSymbolFqn);
+    if (!anchor) {
+      graphViewEl.classList.add("muted");
+      graphViewEl.textContent = graphMode === "file"
+        ? "Select a file to view file graph."
+        : "Select a symbol to view graph.";
+      return;
+    }
+    const key = `${graphMode}|${anchor}|${p.depth}|${p.hideBuiltins}|${p.hideExternal}`;
+    graphViewEl.classList.remove("muted");
+    graphViewEl.innerHTML = "<div class='card'>Loading graph...</div>";
+    try {
+      let data = graphDataCache.get(key);
+      if (!data) {
+        const targetParam = graphMode === "file"
+          ? `file=${encodeURIComponent(anchor)}`
+          : `fqn=${encodeURIComponent(anchor)}`;
+        data = await fetchJson(`/api/graph?${targetParam}&depth=${p.depth}&hide_builtins=${p.hideBuiltins ? "true" : "false"}&hide_external=${p.hideExternal ? "true" : "false"}`);
+        graphDataCache.set(key, data);
+      }
+      renderGraphData(data);
+    } catch (e) {
+      graphViewEl.classList.add("muted");
+      graphViewEl.textContent = (e && (e.error || e.message)) || "Graph unavailable.";
+    }
   }
 
   function renderRecentSymbols() {
@@ -509,9 +649,33 @@
     }
   }
 
+  function bindGraphControls() {
+    if (tabDetailsEl) tabDetailsEl.addEventListener("click", () => setActiveTab("details"));
+    if (tabGraphEl) tabGraphEl.addEventListener("click", () => setActiveTab("graph"));
+    const rerender = () => {
+      graphDataCache.clear();
+      if (activeTab === "graph") loadGraph();
+    };
+    if (graphModeEl) graphModeEl.addEventListener("change", rerender);
+    if (graphDepthEl) graphDepthEl.addEventListener("change", rerender);
+    if (graphHideBuiltinsEl) graphHideBuiltinsEl.addEventListener("change", rerender);
+    if (graphHideExternalEl) graphHideExternalEl.addEventListener("change", rerender);
+    if (graphSearchEl) graphSearchEl.addEventListener("input", () => {
+      if (activeTab === "graph") {
+        const p = graphParams();
+        const graphMode = p.mode === "file" ? "file" : "symbol";
+        const anchor = graphMode === "file" ? activeFilePath : activeSymbolFqn;
+        const key = `${graphMode}|${anchor}|${p.depth}|${p.hideBuiltins}|${p.hideExternal}`;
+        const cached = graphDataCache.get(key);
+        if (cached) renderGraphData(cached);
+      }
+    });
+  }
+
   async function loadFile(relFilePath) {
     activeFilePath = relFilePath;
     highlightActiveFile();
+    graphDataCache.clear();
     fileViewEl.classList.remove("muted");
     fileViewEl.textContent = "Loading file intelligence...";
     try {
@@ -536,6 +700,9 @@
       highlightActiveSymbol();
       highlightActiveFile();
       await updateUiState({ opened_file: relFilePath });
+      if (activeTab === "graph" && graphParams().mode === "file") {
+        await loadGraph();
+      }
     } catch (e) {
       fileViewEl.classList.add("muted");
       fileViewEl.textContent = (e && (e.error || e.message)) || "Failed to load file intelligence";
@@ -573,6 +740,7 @@
   async function loadSymbol(fqn) {
     activeSymbolFqn = fqn;
     highlightActiveSymbol();
+    graphDataCache.clear();
     showSymbolLoading();
     try {
       const symbolPromise = (async () => {
@@ -673,6 +841,9 @@
       bindConnectionChips(symbolViewEl);
       highlightActiveSymbol();
       await updateUiState({ opened_symbol: (result.fqn || fqn), last_symbol: (result.fqn || fqn) });
+      if (activeTab === "graph" && graphParams().mode === "symbol") {
+        await loadGraph(result.fqn || fqn);
+      }
     } catch (e) {
       symbolViewEl.classList.add("muted");
       symbolViewEl.textContent = (e && (e.error || e.message)) || "Failed to load symbol intelligence";
@@ -697,6 +868,8 @@
   async function init() {
     bindSearchInput();
     bindWorkspaceControls();
+    bindGraphControls();
+    setActiveTab("details");
     try {
       await loadWorkspace();
       await refreshForActiveRepo();
