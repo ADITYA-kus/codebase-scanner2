@@ -41,6 +41,10 @@
   let activeTab = "details";
   let graphDataCache = new Map();
   let architectureCache = null;
+  let repoSummary = null;
+  let repoSummaryUpdatedAt = "";
+  let repoSummaryStatus = "idle"; // idle|loading|ready|missing|error
+  let repoSummaryError = "";
 
   function withRepo(path) {
     return new URL(path, window.location.origin).toString();
@@ -114,6 +118,10 @@
     recentFiles = [];
     lastSymbol = "";
     architectureCache = null;
+    repoSummary = null;
+    repoSummaryUpdatedAt = "";
+    repoSummaryStatus = "idle";
+    repoSummaryError = "";
     renderRecents();
   }
 
@@ -169,14 +177,67 @@
     }).join("");
   }
 
+  function repoSummarySection() {
+    const cmd = `python cli.py api repo_summary --repo ${repoName || "<repo>"}`;
+    const refreshBtn = "<button id='repo-summary-refresh' class='repo-refresh-btn' type='button'>Refresh summary</button>";
+    if (repoSummaryStatus === "loading") {
+      return `<div class="card"><div class="section-title">Repo Summary</div>${refreshBtn}<div class="path">Loading summary...</div></div>`;
+    }
+    if (repoSummaryStatus === "missing") {
+      return `<div class="card arch-missing"><div class="section-title">Repo Summary</div>${refreshBtn}<div>Repo summary not generated yet.</div><div class="path">${esc(cmd)}</div></div>`;
+    }
+    if (repoSummaryStatus === "error") {
+      return `<div class="card arch-missing"><div class="section-title">Repo Summary</div>${refreshBtn}<div>${esc(repoSummaryError || "Failed to load repo summary.")}</div><div class="path">Run analyze, then: ${esc(cmd)}</div></div>`;
+    }
+    if (repoSummaryStatus !== "ready" || !repoSummary) {
+      return `<div class="card"><div class="section-title">Repo Summary</div>${refreshBtn}<div class="path">Summary is idle. Click refresh.</div></div>`;
+    }
+
+    const payload = repoSummary || {};
+    const summary = payload.summary || {};
+    const bullets = Array.isArray(summary.bullets) ? summary.bullets.slice(0, 7) : [];
+    const notes = Array.isArray(summary.notes) ? summary.notes.slice(0, 5) : [];
+    return `
+      <div class="card">
+        <div class="section-title">Repo Summary</div>
+        ${refreshBtn}
+        <div class="arch-one-liner">${esc(summary.one_liner || "")}</div>
+        ${bullets.length ? `<ul class="arch-bullets">${bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>` : "<div class='muted'>No bullets available.</div>"}
+        ${notes.length ? `<div class="section-title">Notes</div><ul class="arch-bullets">${notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
+        <div class="path">provider: ${esc(payload.provider || "none")} | cached: ${esc(String(payload.cached))} | updated: ${esc(repoSummaryUpdatedAt || "unknown")}</div>
+      </div>
+    `;
+  }
+
+  async function loadRepoSummary(force) {
+    if (!force && repoSummaryStatus === "ready" && repoSummary) return;
+    repoSummaryStatus = "loading";
+    repoSummaryError = "";
+    try {
+      const data = await fetchJson("/api/repo_summary");
+      repoSummary = data.repo_summary || null;
+      repoSummaryUpdatedAt = data.updated_at || "";
+      repoSummaryStatus = "ready";
+    } catch (e) {
+      repoSummary = null;
+      repoSummaryUpdatedAt = "";
+      if (e && e.error === "MISSING_REPO_SUMMARY") {
+        repoSummaryStatus = "missing";
+        repoSummaryError = "";
+      } else {
+        repoSummaryStatus = "error";
+        repoSummaryError = (e && (e.message || e.error)) || "Repo summary load failed";
+      }
+    }
+  }
+
   async function loadArchitecture() {
     if (!architectureViewEl) return;
     architectureViewEl.classList.remove("muted");
     architectureViewEl.innerHTML = "<div class='card'>Loading architecture insights...</div>";
     try {
-      if (!architectureCache) {
-        architectureCache = await fetchJson("/api/architecture");
-      }
+      if (!architectureCache) architectureCache = await fetchJson("/api/architecture");
+      await loadRepoSummary(false);
       const arch = architectureCache.architecture_metrics || {};
       const dep = architectureCache.dependency_cycles || {};
       const repo = arch.repo || {};
@@ -188,6 +249,7 @@
       const cycles = dep.cycles || [];
 
       architectureViewEl.innerHTML = `
+        ${repoSummarySection()}
         <div class="arch-grid">
           <div class="kpi-card"><div class="kpi-label">Orchestrators</div><div class="kpi-value">${orchestrators.length}</div></div>
           <div class="kpi-card"><div class="kpi-label">Critical APIs</div><div class="kpi-value">${critical.length}</div></div>
@@ -212,6 +274,13 @@
         </div>
       `;
 
+      const refreshBtn = architectureViewEl.querySelector("#repo-summary-refresh");
+      if (refreshBtn) {
+        refreshBtn.addEventListener("click", async () => {
+          await loadRepoSummary(true);
+          await loadArchitecture();
+        });
+      }
       architectureViewEl.querySelectorAll(".arch-row").forEach((el) => {
         el.addEventListener("click", async () => {
           const fqn = el.getAttribute("data-fqn");
@@ -220,7 +289,7 @@
           await loadSymbol(fqn);
         });
       });
-      architectureViewEl.querySelectorAll(".copy-cycle").forEach((el) => {
+      architectureViewEl.querySelectorAll(".copy-cycle[data-cycle]").forEach((el) => {
         el.addEventListener("click", async () => {
           const text = el.getAttribute("data-cycle") || "";
           try {
@@ -964,6 +1033,10 @@
   async function refreshForActiveRepo() {
     clearWorkspaceView("Loading workspace...");
     architectureCache = null;
+    repoSummary = null;
+    repoSummaryUpdatedAt = "";
+    repoSummaryStatus = "idle";
+    repoSummaryError = "";
     const okMeta = await loadMeta();
     if (!okMeta) return;
     await loadTree();

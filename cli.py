@@ -329,6 +329,60 @@ def api_llm_explain(args) -> int:
     return 0 if result.get("ok") else 1
 
 
+def api_repo_summary(args) -> int:
+    from analysis.explain import ai_client
+    from analysis.explain.repo_summary_generator import generate_repo_summary
+    from analysis.utils.cache_manager import compute_repo_hash
+
+    paths = resolve_repo_paths(args.repo)
+    repo_dir = paths["repo_dir"]
+    cache_dir = paths["cache_dir"]
+
+    architecture_metrics_path = os.path.join(cache_dir, "architecture_metrics.json")
+    dependency_cycles_path = os.path.join(cache_dir, "dependency_cycles.json")
+    if not os.path.exists(architecture_metrics_path) or not os.path.exists(dependency_cycles_path):
+        print_json({
+            "ok": False,
+            "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+            "repo_hash": compute_repo_hash(repo_dir),
+            "cached": False,
+            "provider": None,
+            "summary": {},
+            "error": "Missing architecture cache. Run: python cli.py api analyze --path <repo>",
+        })
+        return 1
+
+    result = generate_repo_summary(repo_cache_dir=cache_dir, llm_client=ai_client)
+    if not result.get("ok"):
+        print_json({
+            "ok": False,
+            "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+            "repo_hash": compute_repo_hash(repo_dir),
+            "cached": bool(result.get("cached", False)),
+            "provider": result.get("provider"),
+            "summary": {},
+            "error": result.get("error"),
+        })
+        return 1
+
+    final = {
+        "ok": True,
+        "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+        "repo_hash": compute_repo_hash(repo_dir),
+        "cached": bool(result.get("cached", False)),
+        "provider": result.get("provider"),
+        "summary": result.get("summary", {}),
+        "error": None,
+    }
+
+    repo_summary_path = os.path.join(cache_dir, "repo_summary.json")
+    with open(repo_summary_path, "w", encoding="utf-8") as f:
+        json.dump(final, f, indent=2)
+
+    print_json(final)
+    return 0
+
+
 def api_analyze(args) -> int:
     from analysis.runners.phase4_runner import run as run_phase4
     from analysis.explain.explain_runner import run as run_explain
@@ -546,6 +600,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_api_llm_explain.add_argument("--no-cache", action="store_true", help="Bypass read-cache for this request")
     p_api_llm_explain.set_defaults(func=api_llm_explain)
 
+    p_api_repo_summary = api_sub.add_parser("repo_summary", help="LLM repo-level architectural summary")
+    p_api_repo_summary.add_argument("--repo", required=True, help="Repository directory to summarize")
+    p_api_repo_summary.set_defaults(func=api_repo_summary)
+
     p_api_analyze = api_sub.add_parser("analyze", help="Run Phase-4 and explain generation")
     p_api_analyze.add_argument("--path", default=".", help="Repository directory to analyze")
     p_api_analyze.set_defaults(func=api_analyze)
@@ -560,4 +618,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -558,6 +558,34 @@ def api_architecture(repo: Optional[str] = Query(default=None)):
     }
 
 
+@app.get("/api/repo_summary")
+def api_repo_summary(repo: Optional[str] = Query(default=None)):
+    ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
+    if not _has_analysis_cache(ctx):
+        return _missing_cache_response()
+
+    path = os.path.join(ctx["cache_dir"], "repo_summary.json")
+    if not os.path.exists(path):
+        return JSONResponse(
+            status_code=404,
+            content={
+                "ok": False,
+                "error": "MISSING_REPO_SUMMARY",
+                "message": "Repo summary not generated yet.",
+            },
+        )
+
+    data = _load_json(path, {})
+    mtime = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc).isoformat()
+    return {
+        "ok": True,
+        "repo_summary": data,
+        "updated_at": mtime,
+    }
+
+
 @app.get("/api/tree")
 def api_tree(repo: Optional[str] = Query(default=None)):
     ctx = _repo_ctx(repo) if repo else _active_repo_ctx()

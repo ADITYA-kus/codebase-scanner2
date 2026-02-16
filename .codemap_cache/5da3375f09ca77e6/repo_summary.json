@@ -1,0 +1,97 @@
+{
+  "ok": true,
+  "repo": "testing_repo",
+  "repo_hash": "5da3375f09ca77e6",
+  "cached": true,
+  "provider": "gemini",
+  "summary": {
+    "one_liner": "This script-style codebase defines two student classes with display and info methods, lacking complex orchestration.",
+    "bullets": [
+      "Codebase is script-style, not library-style.",
+      "Main entrypoint is testing_repo.test.<module>.",
+      "Student and Student1 classes are defined.",
+      "Methods like display and info are present.",
+      "No dependency cycles detected."
+    ],
+    "notes": [
+      "Several dead symbols identified, suggesting unused code.",
+      "Unresolved calls count is zero, indicating good dependency resolution."
+    ],
+    "top_orchestrators": [
+      {
+        "fqn": "testing_repo.test.<module>",
+        "in": 0,
+        "out": 1,
+        "file": "",
+        "line": -1
+      },
+      {
+        "fqn": "testing_repo.test.Student.display",
+        "in": 1,
+        "out": 1,
+        "file": "test.py",
+        "line": 51
+      },
+      {
+        "fqn": "testing_repo.test.Student.info",
+        "in": 0,
+        "out": 1,
+        "file": "test.py",
+        "line": 47
+      },
+      {
+        "fqn": "testing_repo.test.Student1.__init__",
+        "in": 0,
+        "out": 1,
+        "file": "test.py",
+        "line": 7
+      },
+      {
+        "fqn": "testing_repo.test.Student1.display1",
+        "in": 0,
+        "out": 1,
+        "file": "test.py",
+        "line": 19
+      }
+    ],
+    "critical_apis": [
+      {
+        "fqn": "testing_repo.test.Student.display",
+        "in": 1,
+        "out": 1,
+        "file": "test.py",
+        "line": 51
+      },
+      {
+        "fqn": "testing_repo.test.Student1",
+        "in": 1,
+        "out": 0,
+        "file": "test.py",
+        "line": 6
+      },
+      {
+        "fqn": "testing_repo.test.Student1.info1",
+        "in": 1,
+        "out": 1,
+        "file": "test.py",
+        "line": 13
+      },
+      {
+        "fqn": "testing_repo.test.display",
+        "in": 1,
+        "out": 0,
+        "file": "test.py",
+        "line": 51
+      },
+      {
+        "fqn": "testing_repo.test.<module>",
+        "in": 0,
+        "out": 1,
+        "file": "",
+        "line": -1
+      }
+    ],
+    "dependency_cycles": []
+  },
+  "error": null
+}

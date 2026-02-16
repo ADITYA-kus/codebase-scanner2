@@ -12,5 +12,99 @@
     "model": "gemini-2.5-flash-lite",
     "summary": "What it does: Prints student details.\nConnections: called by testing_repo.test.Student.info; calls builtins.print\nNotes: Simple print statement.",
     "ts": "2026-02-15T15:58:13.916514+00:00"
+  },
+  "repo_summary:9a497fd5e56e3c67fd8ba3b388b0d1550a94e03a15d4507d6082302d913252d2": {
+    "provider": "gemini",
+    "model": "gemini-2.5-flash-lite",
+    "summary": {
+      "one_liner": "This script-style codebase defines two student classes with display and info methods, lacking complex orchestration.",
+      "bullets": [
+        "Codebase is script-style, not library-style.",
+        "Main entrypoint is testing_repo.test.<module>.",
+        "Student and Student1 classes are defined.",
+        "Methods like display and info are present.",
+        "No dependency cycles detected."
+      ],
+      "notes": [
+        "Several dead symbols identified, suggesting unused code.",
+        "Unresolved calls count is zero, indicating good dependency resolution."
+      ],
+      "top_orchestrators": [
+        {
+          "fqn": "testing_repo.test.<module>",
+          "in": 0,
+          "out": 1,
+          "file": "",
+          "line": -1
+        },
+        {
+          "fqn": "testing_repo.test.Student.display",
+          "in": 1,
+          "out": 1,
+          "file": "test.py",
+          "line": 51
+        },
+        {
+          "fqn": "testing_repo.test.Student.info",
+          "in": 0,
+          "out": 1,
+          "file": "test.py",
+          "line": 47
+        },
+        {
+          "fqn": "testing_repo.test.Student1.__init__",
+          "in": 0,
+          "out": 1,
+          "file": "test.py",
+          "line": 7
+        },
+        {
+          "fqn": "testing_repo.test.Student1.display1",
+          "in": 0,
+          "out": 1,
+          "file": "test.py",
+          "line": 19
+        }
+      ],
+      "critical_apis": [
+        {
+          "fqn": "testing_repo.test.Student.display",
+          "in": 1,
+          "out": 1,
+          "file": "test.py",
+          "line": 51
+        },
+        {
+          "fqn": "testing_repo.test.Student1",
+          "in": 1,
+          "out": 0,
+          "file": "test.py",
+          "line": 6
+        },
+        {
+          "fqn": "testing_repo.test.Student1.info1",
+          "in": 1,
+          "out": 1,
+          "file": "test.py",
+          "line": 13
+        },
+        {
+          "fqn": "testing_repo.test.display",
+          "in": 1,
+          "out": 0,
+          "file": "test.py",
+          "line": 51
+        },
+        {
+          "fqn": "testing_repo.test.<module>",
+          "in": 0,
+          "out": 1,
+          "file": "",
+          "line": -1
+        }
+      ],
+      "dependency_cycles": []
+    },
+    "ts": "2026-02-16T18:07:12.570309+00:00"
   }
 }
