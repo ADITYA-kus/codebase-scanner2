@@ -1,0 +1,284 @@
+{
+  "repo_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo",
+  "repo_hash": "5da3375f09ca77e6",
+  "updated_at": "2026-02-14T09:49:29.089872+00:00",
+  "fingerprints": {
+    "__init__.py": {
+      "mtime_ns": 1770727983362619200,
+      "size": 0
+    },
+    "test.py": {
+      "mtime_ns": 1771062535466586000,
+      "size": 1269
+    }
+  },
+  "paths": {
+    "resolved_calls_path": "D:\\pythonFiles\\code_assist_phase2\\.codemap_cache\\5da3375f09ca77e6\\resolved_calls.json",
+    "explain_path": "D:\\pythonFiles\\code_assist_phase2\\.codemap_cache\\5da3375f09ca77e6\\explain.json"
+  },
+  "symbol_snapshot": [
+    {
+      "name": "introduction1",
+      "qualified_name": "introduction1",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 3,
+      "end_line": 4,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "Student1",
+      "qualified_name": "Student1",
+      "kind": "class",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 6,
+      "end_line": 22,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "__init__",
+      "qualified_name": "Student1.__init__",
+      "kind": "method",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 7,
+      "end_line": 11,
+      "class_name": "Student1",
+      "metadata": {}
+    },
+    {
+      "name": "info1",
+      "qualified_name": "Student1.info1",
+      "kind": "method",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 13,
+      "end_line": 17,
+      "class_name": "Student1",
+      "metadata": {}
+    },
+    {
+      "name": "display1",
+      "qualified_name": "Student1.display1",
+      "kind": "method",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 19,
+      "end_line": 22,
+      "class_name": "Student1",
+      "metadata": {}
+    },
+    {
+      "name": "introduction",
+      "qualified_name": "introduction",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 40,
+      "end_line": 42,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "Student",
+      "qualified_name": "Student",
+      "kind": "class",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 44,
+      "end_line": 53,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "info",
+      "qualified_name": "Student.info",
+      "kind": "method",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 47,
+      "end_line": 49,
+      "class_name": "Student",
+      "metadata": {}
+    },
+    {
+      "name": "display",
+      "qualified_name": "Student.display",
+      "kind": "method",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 51,
+      "end_line": 53,
+      "class_name": "Student",
+      "metadata": {}
+    },
+    {
+      "name": "demo",
+      "qualified_name": "demo",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 56,
+      "end_line": 57,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "r1",
+      "qualified_name": "r1",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 60,
+      "end_line": 61,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "r2",
+      "qualified_name": "r2",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 63,
+      "end_line": 64,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "r3",
+      "qualified_name": "r3",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 66,
+      "end_line": 67,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "r4",
+      "qualified_name": "r4",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 69,
+      "end_line": 71,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "r5",
+      "qualified_name": "r5",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 73,
+      "end_line": 74,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "r6",
+      "qualified_name": "r6",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 76,
+      "end_line": 77,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "__init__",
+      "qualified_name": "__init__",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 7,
+      "end_line": 11,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "info1",
+      "qualified_name": "info1",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 13,
+      "end_line": 17,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "display1",
+      "qualified_name": "display1",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 19,
+      "end_line": 22,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "info",
+      "qualified_name": "info",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 47,
+      "end_line": 49,
+      "class_name": null,
+      "metadata": {}
+    },
+    {
+      "name": "display",
+      "qualified_name": "display",
+      "kind": "function",
+      "module": "testing_repo.test",
+      "file_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 51,
+      "end_line": 53,
+      "class_name": null,
+      "metadata": {}
+    }
+  ],
+  "imports_snapshot": {
+    "testing_repo.test": {
+      "pd": {
+        "alias": "pd",
+        "module": "pandas",
+        "symbol": null
+      },
+      "np": {
+        "alias": "np",
+        "module": "numpy",
+        "symbol": null
+      },
+      "os": {
+        "alias": "os",
+        "module": "os",
+        "symbol": null
+      },
+      "train_test_split": {
+        "alias": "train_test_split",
+        "module": "sklearn.model_selection",
+        "symbol": "train_test_split"
+      },
+      "accuracy_score": {
+        "alias": "accuracy_score",
+        "module": "sklearn.metrics",
+        "symbol": "accuracy_score"
+      }
+    }
+  },
+  "file_module_map": {
+    "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py": "testing_repo.test"
+  }
+}

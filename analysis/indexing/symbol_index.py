@@ -120,13 +120,48 @@ class SymbolIndex:
     # Maintenance
     # ----------------------------
     def remove_by_file(self, file_path: str):
-        self._symbols = [s for s in self._symbols if s.file_path != file_path]
-
+        remaining = [s for s in self._symbols if s.file_path != file_path]
+        self._symbols = []
         self._by_name.clear()
         self._by_fqn.clear()
-
-        for s in self._symbols:
+        for s in remaining:
             self.add_symbol(s)
+
+    def symbols_for_file(self, file_path: str) -> List[SymbolInfo]:
+        return [s for s in self._symbols if s.file_path == file_path]
+
+    def snapshot(self) -> List[Dict]:
+        return [
+            {
+                "name": s.name,
+                "qualified_name": s.qualified_name,
+                "kind": s.kind.value,
+                "module": s.module,
+                "file_path": s.file_path,
+                "start_line": s.start_line,
+                "end_line": s.end_line,
+                "class_name": s.class_name,
+                "metadata": s.metadata,
+            }
+            for s in self._symbols
+        ]
+
+    def load_snapshot(self, records: List[Dict]):
+        self.clear()
+        for r in records:
+            self.add_symbol(
+                SymbolInfo(
+                    name=r["name"],
+                    qualified_name=r["qualified_name"],
+                    kind=SymbolKind(r["kind"]),
+                    module=r["module"],
+                    file_path=r["file_path"],
+                    start_line=r["start_line"],
+                    end_line=r["end_line"],
+                    class_name=r.get("class_name"),
+                    metadata=r.get("metadata", {}),
+                )
+            )
 
     def clear(self):
         self._symbols.clear()

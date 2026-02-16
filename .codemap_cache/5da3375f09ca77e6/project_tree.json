@@ -1,0 +1,17 @@
+{
+  "name": "testing_repo",
+  "type": "directory",
+  "path": "",
+  "children": [
+    {
+      "name": "__init__.py",
+      "type": "file",
+      "path": "__init__.py"
+    },
+    {
+      "name": "test.py",
+      "type": "file",
+      "path": "test.py"
+    }
+  ]
+}

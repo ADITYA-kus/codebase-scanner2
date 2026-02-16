@@ -96,9 +96,11 @@ def run(repo_dir: Optional[str] = None, output_dir: Optional[str] = None) -> Dic
 
     if repo_dir is None:
         repo_dir = os.path.join(analysis_root, "testing_repo")
+    repo_dir = os.path.abspath(repo_dir)
 
     if output_dir is None:
         output_dir = os.path.join(analysis_root, "output")
+    output_dir = os.path.abspath(output_dir)
 
     os.makedirs(output_dir, exist_ok=True)
 

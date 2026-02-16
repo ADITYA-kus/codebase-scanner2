@@ -89,6 +89,30 @@ class ImportResolver:
         """
         self._imports_by_module.clear()
 
+    def snapshot_imports_by_module(self) -> Dict[str, Dict[str, dict]]:
+        data: Dict[str, Dict[str, dict]] = {}
+        for module_name, imports in self._imports_by_module.items():
+            data[module_name] = {}
+            for alias, resolved in imports.items():
+                data[module_name][alias] = {
+                    "alias": resolved.alias,
+                    "module": resolved.module,
+                    "symbol": resolved.symbol,
+                }
+        return data
+
+    def load_imports_by_module(self, data: Dict[str, Dict[str, dict]]):
+        self._imports_by_module.clear()
+        for module_name, imports in data.items():
+            restored: Dict[str, ResolvedImport] = {}
+            for alias, record in imports.items():
+                restored[alias] = ResolvedImport(
+                    alias=record.get("alias", alias),
+                    module=record.get("module", ""),
+                    symbol=record.get("symbol"),
+                )
+            self._imports_by_module[module_name] = restored
+
     # ----------------------------
     # Internal Helpers
     # ----------------------------

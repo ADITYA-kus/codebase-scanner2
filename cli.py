@@ -2,11 +2,13 @@ import argparse
 import json
 import os
 import sys
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 
 def print_json(obj) -> None:
     sys.stdout.write(json.dumps(obj, indent=2))
     sys.stdout.write("\n")
+
+MISSING_ANALYSIS_MESSAGE = "Run: python cli.py api analyze --path <repo>"
 
 
 
@@ -15,20 +17,98 @@ def _analysis_root() -> str:
     return os.path.join(os.path.dirname(__file__), "analysis")
 
 
-def _explain_json_path() -> str:
-    return os.path.join(_analysis_root(), "output", "explain.json")
+def _build_project_tree_snapshot(repo_dir: str) -> Dict[str, Any]:
+    repo_dir = os.path.abspath(repo_dir)
+    ignore_dirs = {".git", ".codemap_cache", "__pycache__", ".venv", "venv", "node_modules"}
+    root = {
+        "name": os.path.basename(repo_dir.rstrip("\\/")) or repo_dir,
+        "type": "directory",
+        "path": "",
+        "children": [],
+    }
+    nodes: Dict[str, Dict[str, Any]] = {"": root}
+
+    for current_root, dirs, files in os.walk(repo_dir):
+        dirs[:] = sorted([d for d in dirs if d not in ignore_dirs and not d.startswith(".")])
+        files = sorted([f for f in files if not f.startswith(".")])
+
+        rel_root = os.path.relpath(current_root, repo_dir)
+        rel_root = "" if rel_root == "." else rel_root.replace("\\", "/")
+        parent = nodes[rel_root]
+
+        for d in dirs:
+            rel_path = f"{rel_root}/{d}" if rel_root else d
+            node = {"name": d, "type": "directory", "path": rel_path, "children": []}
+            parent["children"].append(node)
+            nodes[rel_path] = node
+
+        for f in files:
+            rel_path = f"{rel_root}/{f}" if rel_root else f
+            parent["children"].append({"name": f, "type": "file", "path": rel_path})
+
+    return root
 
 
-def load_explain_db() -> Dict[str, Any]:
-    path = _explain_json_path()
+def resolve_repo_paths(repo_dir: Optional[str]) -> Dict[str, str]:
+    if not repo_dir:
+        output_dir = os.path.join(_analysis_root(), "output")
+        return {
+            "repo_dir": "",
+            "cache_dir": output_dir,
+            "explain_path": os.path.join(output_dir, "explain.json"),
+            "resolved_calls_path": os.path.join(output_dir, "resolved_calls.json"),
+            "llm_cache_path": os.path.join(output_dir, "llm_cache.json"),
+        }
+
+    repo_candidate = os.path.abspath(repo_dir)
+    if not os.path.exists(repo_candidate):
+        alt_candidate = os.path.abspath(os.path.join(_analysis_root(), repo_dir))
+        if os.path.exists(alt_candidate):
+            repo_candidate = alt_candidate
+
+    from analysis.utils.cache_manager import get_cache_dir
+    cache_dir = get_cache_dir(repo_candidate)
+    return {
+        "repo_dir": repo_candidate,
+        "cache_dir": cache_dir,
+        "explain_path": os.path.join(cache_dir, "explain.json"),
+        "resolved_calls_path": os.path.join(cache_dir, "resolved_calls.json"),
+        "llm_cache_path": os.path.join(cache_dir, "llm_cache.json"),
+    }
+
+
+def load_explain_db(repo: Optional[str] = None) -> Dict[str, Any]:
+    paths = resolve_repo_paths(repo)
+    path = paths["explain_path"]
     if not os.path.exists(path):
-        raise FileNotFoundError(
-            f"explain.json not found at:\n  {path}\n\n"
+        hint = (
+            "Run:\n  python cli.py api analyze --path <repo>\n"
+            "to build repo-scoped cache before querying with --repo."
+            if repo else
             "Run:\n  python -m analysis.explain.explain_runner\n"
             "after generating resolved_calls.json from Phase-4 runner."
         )
+        raise FileNotFoundError(
+            f"explain.json not found at:\n  {path}\n\n"
+            f"{hint}"
+        )
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def _symbol_payload(item: Dict[str, Any], fallback_fqn: str) -> Dict[str, Any]:
+    location = item.get("location") or {}
+    return {
+        "fqn": item.get("fqn", fallback_fqn),
+        "one_liner": item.get("one_liner", ""),
+        "details": item.get("details", []),
+        "tags": item.get("tags", []),
+        "location": {
+            "file": location.get("file", ""),
+            "start_line": location.get("start_line", -1),
+            "end_line": location.get("end_line", -1),
+        },
+    }
 
 
 def suggest_keys(db: Dict[str, Any], query: str, k: int = 5) -> List[str]:
@@ -57,7 +137,7 @@ def suggest_keys(db: Dict[str, Any], query: str, k: int = 5) -> List[str]:
 
 
 def cmd_explain(args) -> int:
-    db = load_explain_db()
+    db = load_explain_db(args.repo)
     fqn = args.fqn
 
     if fqn not in db:
@@ -94,7 +174,7 @@ def cmd_explain(args) -> int:
 
 
 def cmd_search(args) -> int:
-    db = load_explain_db()
+    db = load_explain_db(args.repo)
     q = args.query.lower()
 
     matches = [k for k in db.keys() if q in k.lower()]
@@ -112,7 +192,7 @@ def cmd_search(args) -> int:
 
 
 def cmd_list(args) -> int:
-    db = load_explain_db()
+    db = load_explain_db(args.repo)
     keys = sorted(db.keys())
 
     if args.module:
@@ -131,62 +211,88 @@ def cmd_list(args) -> int:
 
 
 def api_explain(args) -> int:
-    db = load_explain_db()
+    paths = resolve_repo_paths(args.repo)
+    if args.repo and not os.path.exists(paths["explain_path"]):
+        print_json({
+            "ok": False,
+            "error": "MISSING_ANALYSIS",
+            "message": MISSING_ANALYSIS_MESSAGE,
+        })
+        return 1
+
+    db = load_explain_db(args.repo)
     fqn = args.fqn
 
     if fqn not in db:
-        suggestions = suggest_keys(db, fqn, k=8)
         print_json({
             "ok": False,
             "error": "NOT_FOUND",
             "fqn": fqn,
-            "suggestions": suggestions
         })
         return 1
 
     print_json({
         "ok": True,
-        "result": db[fqn]
+        "result": _symbol_payload(db[fqn], fqn)
     })
     return 0
 
 
 def api_search(args) -> int:
-    db = load_explain_db()
+    paths = resolve_repo_paths(args.repo)
+    if args.repo and not os.path.exists(paths["explain_path"]):
+        print_json({
+            "ok": False,
+            "error": "MISSING_ANALYSIS",
+            "message": MISSING_ANALYSIS_MESSAGE,
+        })
+        return 1
+
+    db = load_explain_db(args.repo)
     q = args.query.lower()
     matches = [k for k in db.keys() if q in k.lower()]
     matches.sort()
-
+    results = matches[:args.limit]
     print_json({
         "ok": True,
         "query": args.query,
         "count": len(matches),
-        "results": matches[:args.limit],
+        "results": results,
         "truncated": len(matches) > args.limit
     })
     return 0
 
 
 def api_list(args) -> int:
-    db = load_explain_db()
+    paths = resolve_repo_paths(args.repo)
+    if args.repo and not os.path.exists(paths["explain_path"]):
+        print_json({
+            "ok": False,
+            "error": "MISSING_ANALYSIS",
+            "message": MISSING_ANALYSIS_MESSAGE,
+        })
+        return 1
+
+    db = load_explain_db(args.repo)
     keys = sorted(db.keys())
 
     if args.module:
         prefix = args.module.strip()
         keys = [k for k in keys if k.startswith(prefix)]
 
+    results = keys[:args.limit]
     print_json({
         "ok": True,
         "module": args.module,
         "count": len(keys),
-        "results": keys[:args.limit],
+        "results": results,
         "truncated": len(keys) > args.limit
     })
     return 0
 
 
 def api_status(args) -> int:
-    path = _explain_json_path()
+    path = resolve_repo_paths(args.repo)["explain_path"]
     if not os.path.exists(path):
         print_json({
             "ok": False,
@@ -196,7 +302,7 @@ def api_status(args) -> int:
         return 1
 
     # lightweight stats (no full load needed, but we can load safely)
-    db = load_explain_db()
+    db = load_explain_db(args.repo)
     print_json({
         "ok": True,
         "path": path,
@@ -205,24 +311,113 @@ def api_status(args) -> int:
     return 0
 
 
+def api_llm_explain(args) -> int:
+    from analysis.explain.ai_client import llm_explain_symbol
+
+    paths = resolve_repo_paths(args.repo)
+    if not os.path.exists(paths["explain_path"]):
+        print_json({
+            "ok": False,
+            "error": "MISSING_ANALYSIS",
+            "message": MISSING_ANALYSIS_MESSAGE,
+        })
+        return 1
+
+    result = llm_explain_symbol(fqn=args.fqn, repo_dir=paths["repo_dir"], no_cache=args.no_cache)
+    print_json(result)
+    return 0 if result.get("ok") else 1
+
+
 def api_analyze(args) -> int:
     from analysis.runners.phase4_runner import run as run_phase4
     from analysis.explain.explain_runner import run as run_explain
+    from analysis.graph.callgraph_index import write_hub_metrics_from_resolved_calls
+    from analysis.utils.cache_manager import (
+        build_manifest,
+        collect_fingerprints,
+        diff_fingerprints,
+        get_cache_dir,
+        load_manifest,
+        save_manifest,
+        should_rebuild,
+    )
 
-    # For now allow --path as repo_dir; output stays default
-    repo_dir = args.path
+    repo_dir = resolve_repo_paths(args.path)["repo_dir"]
+    cache_dir = get_cache_dir(repo_dir)
+    os.makedirs(cache_dir, exist_ok=True)
+
+    resolved_calls_path = os.path.join(cache_dir, "resolved_calls.json")
+    explain_path = os.path.join(cache_dir, "explain.json")
+    analysis_metrics_path = os.path.join(cache_dir, "analysis_metrics.json")
+    llm_cache_path = os.path.join(cache_dir, "llm_cache.json")
+    project_tree_path = os.path.join(cache_dir, "project_tree.json")
+
+    previous_manifest = load_manifest(repo_dir)
+    previous_fingerprints = previous_manifest.get("fingerprints", {})
+    current_fingerprints = collect_fingerprints(repo_dir)
+    delta = diff_fingerprints(previous_fingerprints, current_fingerprints)
+
+    rebuild_required = should_rebuild(repo_dir)
+    r1 = {}
+    r2 = {}
+    metrics = {}
 
     try:
-        r1 = run_phase4(repo_dir=repo_dir)
-        r2 = run_explain(repo_dir=repo_dir)
+        if rebuild_required:
+            r1 = run_phase4(repo_dir=repo_dir, output_dir=cache_dir)
+            r2 = run_explain(repo_dir=repo_dir, output_dir=cache_dir)
+            resolved_calls_path = r1.get("resolved_calls_path", resolved_calls_path)
+            metrics = write_hub_metrics_from_resolved_calls(
+                resolved_calls_path=resolved_calls_path,
+                output_path=analysis_metrics_path,
+            )
+            save_manifest(
+                repo_dir,
+                build_manifest(
+                    repo_dir,
+                    current_fingerprints,
+                    metadata={
+                        "symbol_snapshot": r1.get("symbol_snapshot", []),
+                        "imports_snapshot": r1.get("imports_snapshot", {}),
+                        "file_module_map": r1.get("file_module_map", {}),
+                        "metrics_summary": {
+                            "critical_apis": len(metrics.get("critical_apis", [])),
+                            "orchestrators": len(metrics.get("orchestrators", [])),
+                        },
+                    },
+                ),
+            )
+            tree_snapshot = _build_project_tree_snapshot(repo_dir)
+            with open(project_tree_path, "w", encoding="utf-8") as f:
+                json.dump(tree_snapshot, f, indent=2)
+        elif os.path.exists(resolved_calls_path):
+            metrics = write_hub_metrics_from_resolved_calls(
+                resolved_calls_path=resolved_calls_path,
+                output_path=analysis_metrics_path,
+            )
+            if not os.path.exists(project_tree_path):
+                tree_snapshot = _build_project_tree_snapshot(repo_dir)
+                with open(project_tree_path, "w", encoding="utf-8") as f:
+                    json.dump(tree_snapshot, f, indent=2)
     except Exception as e:
         print_json({"ok": False, "error": "ANALYZE_FAILED", "message": str(e)})
         return 1
 
     print_json({
         "ok": True,
-        **r1,
-        **r2
+        "cached": not rebuild_required,
+        "changed_files": delta["changed_files"],
+        "incremental": r1.get("incremental", False),
+        "reindexed_files": r1.get("reindexed_files", 0),
+        "impacted_files": r1.get("impacted_files", 0),
+        "cache_dir": cache_dir,
+        "resolved_calls_path": r1.get("resolved_calls_path", resolved_calls_path),
+        "explain_path": r2.get("explain_path", explain_path),
+        "analysis_metrics_path": analysis_metrics_path,
+        "llm_cache_path": llm_cache_path,
+        "project_tree_path": project_tree_path,
+        "critical_apis": len(metrics.get("critical_apis", [])),
+        "orchestrators": len(metrics.get("orchestrators", [])),
     })
     return 0
 
@@ -238,15 +433,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_explain = sub.add_parser("explain", help="Explain a symbol by fully-qualified name")
     p_explain.add_argument("fqn", help="Fully-qualified symbol name (e.g. testing_repo.test.Student.display)")
+    p_explain.add_argument("--repo", default=None, help="Repository directory to read repo-scoped cached explain.json")
     p_explain.set_defaults(func=cmd_explain)
 
     p_search = sub.add_parser("search", help="Search symbols by substring")
     p_search.add_argument("query", help="Search keyword (case-insensitive)")
+    p_search.add_argument("--repo", default=None, help="Repository directory to read repo-scoped cached explain.json")
     p_search.add_argument("--limit", type=int, default=30, help="Max results to show")
     p_search.set_defaults(func=cmd_search)
 
     p_list = sub.add_parser("list", help="List all symbols (optionally filter by module prefix)")
     p_list.add_argument("--module", default=None, help="Module prefix filter (e.g. testing_repo.test)")
+    p_list.add_argument("--repo", default=None, help="Repository directory to read repo-scoped cached explain.json")
     p_list.add_argument("--limit", type=int, default=50, help="Max results to show")
     p_list.set_defaults(func=cmd_list)
 
@@ -260,20 +458,30 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_api_explain = api_sub.add_parser("explain", help="Return JSON explanation for one symbol")
     p_api_explain.add_argument("fqn", help="Fully-qualified symbol name")
+    p_api_explain.add_argument("--repo", default=None, help="Repository directory to read repo-scoped cached explain.json")
     p_api_explain.set_defaults(func=api_explain)
 
     p_api_search = api_sub.add_parser("search", help="Search symbols by substring (JSON)")
     p_api_search.add_argument("query", help="Search keyword")
+    p_api_search.add_argument("--repo", default=None, help="Repository directory to read repo-scoped cached explain.json")
     p_api_search.add_argument("--limit", type=int, default=50)
     p_api_search.set_defaults(func=api_search)
 
     p_api_list = api_sub.add_parser("list", help="List all symbols (JSON)")
     p_api_list.add_argument("--module", default=None)
+    p_api_list.add_argument("--repo", default=None, help="Repository directory to read repo-scoped cached explain.json")
     p_api_list.add_argument("--limit", type=int, default=200)
     p_api_list.set_defaults(func=api_list)
 
     p_api_status = api_sub.add_parser("status", help="Explain DB status (JSON)")
+    p_api_status.add_argument("--repo", default=None, help="Repository directory to read repo-scoped cached explain.json")
     p_api_status.set_defaults(func=api_status)
+
+    p_api_llm_explain = api_sub.add_parser("llm_explain", help="LLM-enhanced architecture explanation for one symbol")
+    p_api_llm_explain.add_argument("fqn", help="Fully-qualified symbol name")
+    p_api_llm_explain.add_argument("--repo", required=True, help="Repository directory to analyze")
+    p_api_llm_explain.add_argument("--no-cache", action="store_true", help="Bypass read-cache for this request")
+    p_api_llm_explain.set_defaults(func=api_llm_explain)
 
     p_api_analyze = api_sub.add_parser("analyze", help="Run Phase-4 and explain generation")
     p_api_analyze.add_argument("--path", default=".", help="Repository directory to analyze")

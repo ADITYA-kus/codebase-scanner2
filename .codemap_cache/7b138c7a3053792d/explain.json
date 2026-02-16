@@ -1,0 +1,2796 @@
+{
+  "analysis.call_graph.call_extractor.FunctionCallVisitor": {
+    "fqn": "analysis.call_graph.call_extractor.FunctionCallVisitor",
+    "one_liner": "FunctionCallVisitor() does work related to 'FunctionCallVisitor'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:5-81",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 5,
+      "end_line": 81
+    }
+  },
+  "analysis.call_graph.call_extractor.FunctionCallVisitor.__init__": {
+    "fqn": "analysis.call_graph.call_extractor.FunctionCallVisitor.__init__",
+    "one_liner": "__init__(self, file_path) initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:6-10",
+      "Signature: Parameters: self, file_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 6,
+      "end_line": 10
+    }
+  },
+  "analysis.call_graph.call_extractor.FunctionCallVisitor.visit_ClassDef": {
+    "fqn": "analysis.call_graph.call_extractor.FunctionCallVisitor.visit_ClassDef",
+    "one_liner": "visit_ClassDef(self, node) does work related to 'visit ClassDef'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:13-19",
+      "Signature: Parameters: self, node",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 13,
+      "end_line": 19
+    }
+  },
+  "analysis.call_graph.call_extractor.FunctionCallVisitor.visit_FunctionDef": {
+    "fqn": "analysis.call_graph.call_extractor.FunctionCallVisitor.visit_FunctionDef",
+    "one_liner": "visit_FunctionDef(self, node) does work related to 'visit FunctionDef'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:21-27",
+      "Signature: Parameters: self, node",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 21,
+      "end_line": 27
+    }
+  },
+  "analysis.call_graph.call_extractor.FunctionCallVisitor.visit_Call": {
+    "fqn": "analysis.call_graph.call_extractor.FunctionCallVisitor.visit_Call",
+    "one_liner": "visit_Call(self, node) does work related to 'visit Call'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:29-70",
+      "Signature: Parameters: self, node",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None. Examples: None"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 29,
+      "end_line": 70
+    }
+  },
+  "analysis.call_graph.call_extractor.FunctionCallVisitor._get_call_name": {
+    "fqn": "analysis.call_graph.call_extractor.FunctionCallVisitor._get_call_name",
+    "one_liner": "_get_call_name(self, node) retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:72-81",
+      "Signature: Parameters: self, node",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: an attribute value. Examples: None, node.id"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 72,
+      "end_line": 81
+    }
+  },
+  "analysis.call_graph.call_extractor.extract_function_calls": {
+    "fqn": "analysis.call_graph.call_extractor.extract_function_calls",
+    "one_liner": "extract_function_calls(file_path) does work related to 'extract function calls'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:84-91",
+      "Signature: Parameters: file_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: an attribute value. Examples: visitor.calls"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 84,
+      "end_line": 91
+    }
+  },
+  "analysis.call_graph.call_extractor.__init__": {
+    "fqn": "analysis.call_graph.call_extractor.__init__",
+    "one_liner": "__init__() initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:6-10",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 6,
+      "end_line": 10
+    }
+  },
+  "analysis.call_graph.call_extractor.visit_ClassDef": {
+    "fqn": "analysis.call_graph.call_extractor.visit_ClassDef",
+    "one_liner": "visit_ClassDef() does work related to 'visit ClassDef'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:13-19",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 13,
+      "end_line": 19
+    }
+  },
+  "analysis.call_graph.call_extractor.visit_FunctionDef": {
+    "fqn": "analysis.call_graph.call_extractor.visit_FunctionDef",
+    "one_liner": "visit_FunctionDef() does work related to 'visit FunctionDef'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:21-27",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 21,
+      "end_line": 27
+    }
+  },
+  "analysis.call_graph.call_extractor.visit_Call": {
+    "fqn": "analysis.call_graph.call_extractor.visit_Call",
+    "one_liner": "visit_Call() does work related to 'visit Call'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:29-70",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 29,
+      "end_line": 70
+    }
+  },
+  "analysis.call_graph.call_extractor._get_call_name": {
+    "fqn": "analysis.call_graph.call_extractor._get_call_name",
+    "one_liner": "_get_call_name() retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py:72-81",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_extractor.py",
+      "start_line": 72,
+      "end_line": 81
+    }
+  },
+  "analysis.call_graph.call_resolver.resolve_calls": {
+    "fqn": "analysis.call_graph.call_resolver.resolve_calls",
+    "one_liner": "resolve_calls(calls, local_functions, imports, class_methods) does work related to 'resolve calls'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_resolver.py:6-56",
+      "Signature: Parameters: calls, local_functions, imports, class_methods",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: resolved"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\call_resolver.py",
+      "start_line": 6,
+      "end_line": 56
+    }
+  },
+  "analysis.call_graph.cross_file_resolver.CrossFileResolver": {
+    "fqn": "analysis.call_graph.cross_file_resolver.CrossFileResolver",
+    "one_liner": "Resolves a function/method call to its exact SymbolInfo",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:8-122",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 8,
+      "end_line": 122
+    }
+  },
+  "analysis.call_graph.cross_file_resolver.CrossFileResolver.__init__": {
+    "fqn": "analysis.call_graph.cross_file_resolver.CrossFileResolver.__init__",
+    "one_liner": "__init__(self, symbol_index, import_resolver) initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:14-20",
+      "Signature: Parameters: self, symbol_index, import_resolver",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 14,
+      "end_line": 20
+    }
+  },
+  "analysis.call_graph.cross_file_resolver.CrossFileResolver.resolve_call": {
+    "fqn": "analysis.call_graph.cross_file_resolver.CrossFileResolver.resolve_call",
+    "one_liner": "resolve_call(self, call, current_module) does work related to 'resolve call'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:25-82",
+      "Signature: Parameters: self, call, current_module",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: None, symbol"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 25,
+      "end_line": 82
+    }
+  },
+  "analysis.call_graph.cross_file_resolver.CrossFileResolver._resolve_method": {
+    "fqn": "analysis.call_graph.cross_file_resolver.CrossFileResolver._resolve_method",
+    "one_liner": "_resolve_method(self, module, class_name, method_name) does work related to 'resolve method'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:88-96",
+      "Signature: Parameters: self, module, class_name, method_name",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: self.symbol_index.get(module, f'{class_name}.{method_name}')"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 88,
+      "end_line": 96
+    }
+  },
+  "analysis.call_graph.cross_file_resolver.CrossFileResolver._resolve_local_function": {
+    "fqn": "analysis.call_graph.cross_file_resolver.CrossFileResolver._resolve_local_function",
+    "one_liner": "_resolve_local_function(self, module, function_name) does work related to 'resolve local function'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:98-103",
+      "Signature: Parameters: self, module, function_name",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: self.symbol_index.get(module, function_name)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 98,
+      "end_line": 103
+    }
+  },
+  "analysis.call_graph.cross_file_resolver.CrossFileResolver._resolve_imported_symbol": {
+    "fqn": "analysis.call_graph.cross_file_resolver.CrossFileResolver._resolve_imported_symbol",
+    "one_liner": "_resolve_imported_symbol(self, resolved) does work related to 'resolve imported symbol'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:105-113",
+      "Signature: Parameters: self, resolved",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: None, self.symbol_index.get(resolved.module, resolved.symbol)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 105,
+      "end_line": 113
+    }
+  },
+  "analysis.call_graph.cross_file_resolver.CrossFileResolver._resolve_module_attribute": {
+    "fqn": "analysis.call_graph.cross_file_resolver.CrossFileResolver._resolve_module_attribute",
+    "one_liner": "_resolve_module_attribute(self, resolved, attr) does work related to 'resolve module attribute'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:115-122",
+      "Signature: Parameters: self, resolved, attr",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: self.symbol_index.get(resolved.module, attr)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 115,
+      "end_line": 122
+    }
+  },
+  "analysis.call_graph.cross_file_resolver.__init__": {
+    "fqn": "analysis.call_graph.cross_file_resolver.__init__",
+    "one_liner": "__init__() initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:14-20",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 14,
+      "end_line": 20
+    }
+  },
+  "analysis.call_graph.cross_file_resolver.resolve_call": {
+    "fqn": "analysis.call_graph.cross_file_resolver.resolve_call",
+    "one_liner": "resolve_call() does work related to 'resolve call'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:25-82",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 25,
+      "end_line": 82
+    }
+  },
+  "analysis.call_graph.cross_file_resolver._resolve_method": {
+    "fqn": "analysis.call_graph.cross_file_resolver._resolve_method",
+    "one_liner": "_resolve_method() does work related to 'resolve method'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:88-96",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 88,
+      "end_line": 96
+    }
+  },
+  "analysis.call_graph.cross_file_resolver._resolve_local_function": {
+    "fqn": "analysis.call_graph.cross_file_resolver._resolve_local_function",
+    "one_liner": "_resolve_local_function() does work related to 'resolve local function'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:98-103",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 98,
+      "end_line": 103
+    }
+  },
+  "analysis.call_graph.cross_file_resolver._resolve_imported_symbol": {
+    "fqn": "analysis.call_graph.cross_file_resolver._resolve_imported_symbol",
+    "one_liner": "_resolve_imported_symbol() does work related to 'resolve imported symbol'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:105-113",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 105,
+      "end_line": 113
+    }
+  },
+  "analysis.call_graph.cross_file_resolver._resolve_module_attribute": {
+    "fqn": "analysis.call_graph.cross_file_resolver._resolve_module_attribute",
+    "one_liner": "_resolve_module_attribute() does work related to 'resolve module attribute'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py:115-122",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\call_graph\\cross_file_resolver.py",
+      "start_line": 115,
+      "end_line": 122
+    }
+  },
+  "analysis.core.ast_parser.parse_python_file": {
+    "fqn": "analysis.core.ast_parser.parse_python_file",
+    "one_liner": "parse_python_file(file_path) does work related to 'parse python file'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\ast_parser.py:3-7",
+      "Signature: Parameters: file_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: ast.parse(source)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\ast_parser.py",
+      "start_line": 3,
+      "end_line": 7
+    }
+  },
+  "analysis.core.class_extractor.extract_classes": {
+    "fqn": "analysis.core.class_extractor.extract_classes",
+    "one_liner": "extract_classes(ast_tree, file_path) does work related to 'extract classes'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\class_extractor.py:6-35",
+      "Signature: Parameters: ast_tree, file_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: classes"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\class_extractor.py",
+      "start_line": 6,
+      "end_line": 35
+    }
+  },
+  "analysis.core.function_extractor.extract_functions": {
+    "fqn": "analysis.core.function_extractor.extract_functions",
+    "one_liner": "extract_functions(ast_tree, file_path) does work related to 'extract functions'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\function_extractor.py:4-16",
+      "Signature: Parameters: ast_tree, file_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: functions"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\function_extractor.py",
+      "start_line": 4,
+      "end_line": 16
+    }
+  },
+  "analysis.core.import_extractor.extract_imports": {
+    "fqn": "analysis.core.import_extractor.extract_imports",
+    "one_liner": "extract_imports(file_path) does work related to 'extract imports'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\import_extractor.py:6-43",
+      "Signature: Parameters: file_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: imports"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\import_extractor.py",
+      "start_line": 6,
+      "end_line": 43
+    }
+  },
+  "analysis.core.test.introduction": {
+    "fqn": "analysis.core.test.introduction",
+    "one_liner": "Prints an intro message.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py:3-4",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py",
+      "start_line": 3,
+      "end_line": 4
+    }
+  },
+  "analysis.core.test.Student": {
+    "fqn": "analysis.core.test.Student",
+    "one_liner": "Represents a student.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py:6-22",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py",
+      "start_line": 6,
+      "end_line": 22
+    }
+  },
+  "analysis.core.test.Student.__init__": {
+    "fqn": "analysis.core.test.Student.__init__",
+    "one_liner": "__init__(self) initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py:7-11",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py",
+      "start_line": 7,
+      "end_line": 11
+    }
+  },
+  "analysis.core.test.Student.info": {
+    "fqn": "analysis.core.test.Student.info",
+    "one_liner": "Calls display() to show student details.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py:13-17",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py",
+      "start_line": 13,
+      "end_line": 17
+    }
+  },
+  "analysis.core.test.Student.display": {
+    "fqn": "analysis.core.test.Student.display",
+    "one_liner": "Prints student details.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py:19-22",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py",
+      "start_line": 19,
+      "end_line": 22
+    }
+  },
+  "analysis.core.test.__init__": {
+    "fqn": "analysis.core.test.__init__",
+    "one_liner": "__init__() initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py:7-11",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py",
+      "start_line": 7,
+      "end_line": 11
+    }
+  },
+  "analysis.core.test.info": {
+    "fqn": "analysis.core.test.info",
+    "one_liner": "info() does work related to 'info'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py:13-17",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py",
+      "start_line": 13,
+      "end_line": 17
+    }
+  },
+  "analysis.core.test.display": {
+    "fqn": "analysis.core.test.display",
+    "one_liner": "display() displays information.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py:19-22",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\core\\test.py",
+      "start_line": 19,
+      "end_line": 22
+    }
+  },
+  "analysis.explain.docstring_extractor.extract_docstrings": {
+    "fqn": "analysis.explain.docstring_extractor.extract_docstrings",
+    "one_liner": "Extract docstrings from a parsed AST tree.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\docstring_extractor.py:9-45",
+      "Signature: Parameters: ast_tree",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: result"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\docstring_extractor.py",
+      "start_line": 9,
+      "end_line": 45
+    }
+  },
+  "analysis.explain.explain_runner.collect_python_files": {
+    "fqn": "analysis.explain.explain_runner.collect_python_files",
+    "one_liner": "collect_python_files(root_dir) does work related to 'collect python files'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py:20-26",
+      "Signature: Parameters: root_dir",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: py_files"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py",
+      "start_line": 20,
+      "end_line": 26
+    }
+  },
+  "analysis.explain.explain_runner.parse_ast": {
+    "fqn": "analysis.explain.explain_runner.parse_ast",
+    "one_liner": "parse_ast(file_path) does work related to 'parse ast'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py:29-31",
+      "Signature: Parameters: file_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: ast.parse(f.read())"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py",
+      "start_line": 29,
+      "end_line": 31
+    }
+  },
+  "analysis.explain.explain_runner.file_to_module": {
+    "fqn": "analysis.explain.explain_runner.file_to_module",
+    "one_liner": "file_to_module(file_path, repo_root) does work related to 'file to module'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py:34-45",
+      "Signature: Parameters: file_path, repo_root",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: f'{repo_name}.{rel}'"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py",
+      "start_line": 34,
+      "end_line": 45
+    }
+  },
+  "analysis.explain.explain_runner.build_callgraph_from_resolved_calls_json": {
+    "fqn": "analysis.explain.explain_runner.build_callgraph_from_resolved_calls_json",
+    "one_liner": "build_callgraph_from_resolved_calls_json(path) builds callgraph from resolved calls json.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py:49-64",
+      "Signature: Parameters: path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: idx"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py",
+      "start_line": 49,
+      "end_line": 64
+    }
+  },
+  "analysis.explain.explain_runner.symbol_fqn": {
+    "fqn": "analysis.explain.explain_runner.symbol_fqn",
+    "one_liner": "symbol_fqn(sym) does work related to 'symbol fqn'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py:67-68",
+      "Signature: Parameters: sym",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: f'{sym.module}.{sym.qualified_name}'"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py",
+      "start_line": 67,
+      "end_line": 68
+    }
+  },
+  "analysis.explain.explain_runner.merge_maps": {
+    "fqn": "analysis.explain.explain_runner.merge_maps",
+    "one_liner": "Merge extractor outputs across files into single dicts.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py:71-78",
+      "Signature: Parameters: dst, src",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py",
+      "start_line": 71,
+      "end_line": 78
+    }
+  },
+  "analysis.explain.explain_runner.run": {
+    "fqn": "analysis.explain.explain_runner.run",
+    "one_liner": "Phase-4 pipeline callable from CLI/VS Code.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py:81-167",
+      "Signature: Parameters: repo_dir, output_dir",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: {'resolved_calls_path': resolved_calls_path, 'total_calls': len(resolved_calls), 'incremental': not full_rebuild, 'reindexed_files': len(changed_existing_abs) if not full_rebuild else len(python_files), 'impacted_files': len(impacted_files), 'changed_files_detected': len(changed_rel_files), 'symbol_snapshot': symbol_index.snapshot(), 'imports_snapshot': import_resolver.snapshot_imports_by_module(), 'file_module_map': file_module_map}"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py",
+      "start_line": 81,
+      "end_line": 167
+    }
+  },
+  "analysis.explain.explain_runner.main": {
+    "fqn": "analysis.explain.explain_runner.main",
+    "one_liner": "main() does work related to 'main'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py:170-175",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\explain_runner.py",
+      "start_line": 170,
+      "end_line": 175
+    }
+  },
+  "analysis.explain.return_analyzer._safe_unparse": {
+    "fqn": "analysis.explain.return_analyzer._safe_unparse",
+    "one_liner": "_safe_unparse(node) does work related to 'safe unparse'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\return_analyzer.py:9-15",
+      "Signature: Parameters: node",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: None, ast.unparse(node)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\return_analyzer.py",
+      "start_line": 9,
+      "end_line": 15
+    }
+  },
+  "analysis.explain.return_analyzer._classify_return_value": {
+    "fqn": "analysis.explain.return_analyzer._classify_return_value",
+    "one_liner": "Classify a return expression node into a simple category.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\return_analyzer.py:18-46",
+      "Signature: Parameters: value",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a constant. Examples: 'expression', 'none'"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\return_analyzer.py",
+      "start_line": 18,
+      "end_line": 46
+    }
+  },
+  "analysis.explain.return_analyzer._analyze_function_returns": {
+    "fqn": "analysis.explain.return_analyzer._analyze_function_returns",
+    "one_liner": "_analyze_function_returns(fn) does work related to 'analyze function returns'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\return_analyzer.py:49-82",
+      "Signature: Parameters: fn",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: {'has_return': True, 'returns_count': len(return_nodes), 'return_kinds': sorted(kinds), 'examples': examples}, {'has_return': False, 'returns_count': 0, 'return_kinds': ['none'], 'examples': []}"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\return_analyzer.py",
+      "start_line": 49,
+      "end_line": 82
+    }
+  },
+  "analysis.explain.return_analyzer.analyze_returns": {
+    "fqn": "analysis.explain.return_analyzer.analyze_returns",
+    "one_liner": "Analyze returns for:",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\return_analyzer.py:85-114",
+      "Signature: Parameters: ast_tree",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: result"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\return_analyzer.py",
+      "start_line": 85,
+      "end_line": 114
+    }
+  },
+  "analysis.explain.signature_extractor._safe_unparse": {
+    "fqn": "analysis.explain.signature_extractor._safe_unparse",
+    "one_liner": "_safe_unparse(node) does work related to 'safe unparse'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\signature_extractor.py:10-16",
+      "Signature: Parameters: node",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: None, ast.unparse(node)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\signature_extractor.py",
+      "start_line": 10,
+      "end_line": 16
+    }
+  },
+  "analysis.explain.signature_extractor._extract_signature_dict": {
+    "fqn": "analysis.explain.signature_extractor._extract_signature_dict",
+    "one_liner": "Extract a normalized signature dict from a FunctionDef node.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\signature_extractor.py:19-72",
+      "Signature: Parameters: fn",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: {'args': pos_args, 'defaults': defaults_map, 'kwonlyargs': kwonly_args, 'kwonly_defaults': kwonly_defaults_map, 'vararg': vararg, 'kwarg': kwarg, 'annotations': annotations}"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\signature_extractor.py",
+      "start_line": 19,
+      "end_line": 72
+    }
+  },
+  "analysis.explain.signature_extractor.extract_signatures": {
+    "fqn": "analysis.explain.signature_extractor.extract_signatures",
+    "one_liner": "Extract signatures for:",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\signature_extractor.py:75-104",
+      "Signature: Parameters: ast_tree",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: result"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\signature_extractor.py",
+      "start_line": 75,
+      "end_line": 104
+    }
+  },
+  "analysis.explain.summary_generator._first_line": {
+    "fqn": "analysis.explain.summary_generator._first_line",
+    "one_liner": "_first_line(text) does work related to 'first line'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py:14-18",
+      "Signature: Parameters: text",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: line or None, None"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py",
+      "start_line": 14,
+      "end_line": 18
+    }
+  },
+  "analysis.explain.summary_generator._humanize_name": {
+    "fqn": "analysis.explain.summary_generator._humanize_name",
+    "one_liner": "_humanize_name(name) does work related to 'humanize name'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py:21-23",
+      "Signature: Parameters: name",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: name.replace('_', ' ').strip()"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py",
+      "start_line": 21,
+      "end_line": 23
+    }
+  },
+  "analysis.explain.summary_generator._format_args": {
+    "fqn": "analysis.explain.summary_generator._format_args",
+    "one_liner": "_format_args(sig) does work related to 'format args'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py:26-49",
+      "Signature: Parameters: sig",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: '(' + ', '.join(parts) + ')', '()'"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py",
+      "start_line": 26,
+      "end_line": 49
+    }
+  },
+  "analysis.explain.summary_generator._return_phrase": {
+    "fqn": "analysis.explain.summary_generator._return_phrase",
+    "one_liner": "_return_phrase(ret_info) does work related to 'return phrase'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py:52-69",
+      "Signature: Parameters: ret_info",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a constant. Examples: 'Returns: mixed/complex.', 'Returns: unknown.'"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py",
+      "start_line": 52,
+      "end_line": 69
+    }
+  },
+  "analysis.explain.summary_generator._tags_from_callees": {
+    "fqn": "analysis.explain.summary_generator._tags_from_callees",
+    "one_liner": "_tags_from_callees(callee_fqns) does work related to 'tags from callees'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py:72-82",
+      "Signature: Parameters: callee_fqns",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: tags"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py",
+      "start_line": 72,
+      "end_line": 82
+    }
+  },
+  "analysis.explain.summary_generator._analyze_method_behavior": {
+    "fqn": "analysis.explain.summary_generator._analyze_method_behavior",
+    "one_liner": "Analyze what a method does based on its callees and name patterns.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py:85-122",
+      "Signature: Parameters: symbol_info, callee_fqns",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a constant. Examples: None, 'initializes the object'"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py",
+      "start_line": 85,
+      "end_line": 122
+    }
+  },
+  "analysis.explain.summary_generator.generate_symbol_summary": {
+    "fqn": "analysis.explain.summary_generator.generate_symbol_summary",
+    "one_liner": "Generate a heuristic summary for one symbol.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py:125-282",
+      "Signature: Parameters: symbol_fqn, symbol_info, docstrings, signatures, returns, callgraph",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: {'fqn': symbol_fqn, 'one_liner': one_liner, 'details': details, 'tags': tags, 'location': location}"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\explain\\summary_generator.py",
+      "start_line": 125,
+      "end_line": 282
+    }
+  },
+  "analysis.graph.callgraph_index.CallSite": {
+    "fqn": "analysis.graph.callgraph_index.CallSite",
+    "one_liner": "A single call occurrence in the code.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:10-18",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 10,
+      "end_line": 18
+    }
+  },
+  "analysis.graph.callgraph_index.CallGraphIndex": {
+    "fqn": "analysis.graph.callgraph_index.CallGraphIndex",
+    "one_liner": "Stores:",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:21-69",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 21,
+      "end_line": 69
+    }
+  },
+  "analysis.graph.callgraph_index.CallGraphIndex.__init__": {
+    "fqn": "analysis.graph.callgraph_index.CallGraphIndex.__init__",
+    "one_liner": "__init__(self) initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:29-32",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 29,
+      "end_line": 32
+    }
+  },
+  "analysis.graph.callgraph_index.CallGraphIndex.add_call": {
+    "fqn": "analysis.graph.callgraph_index.CallGraphIndex.add_call",
+    "one_liner": "add_call(self, callsite) does work related to 'add call'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:37-43",
+      "Signature: Parameters: self, callsite",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 37,
+      "end_line": 43
+    }
+  },
+  "analysis.graph.callgraph_index.CallGraphIndex.callees_of": {
+    "fqn": "analysis.graph.callgraph_index.CallGraphIndex.callees_of",
+    "one_liner": "callees_of(self, caller_fqn) does work related to 'callees of'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:48-49",
+      "Signature: Parameters: self, caller_fqn",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: self._forward.get(caller_fqn, [])"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 48,
+      "end_line": 49
+    }
+  },
+  "analysis.graph.callgraph_index.CallGraphIndex.callers_of": {
+    "fqn": "analysis.graph.callgraph_index.CallGraphIndex.callers_of",
+    "one_liner": "callers_of(self, callee_fqn) does work related to 'callers of'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:51-52",
+      "Signature: Parameters: self, callee_fqn",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: self._reverse.get(callee_fqn, [])"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 51,
+      "end_line": 52
+    }
+  },
+  "analysis.graph.callgraph_index.CallGraphIndex.unresolved_calls": {
+    "fqn": "analysis.graph.callgraph_index.CallGraphIndex.unresolved_calls",
+    "one_liner": "unresolved_calls(self) does work related to 'unresolved calls'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:54-55",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: list(self._unresolved)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 54,
+      "end_line": 55
+    }
+  },
+  "analysis.graph.callgraph_index.CallGraphIndex.all_callers": {
+    "fqn": "analysis.graph.callgraph_index.CallGraphIndex.all_callers",
+    "one_liner": "all_callers(self) does work related to 'all callers'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:57-58",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: sorted(self._forward.keys())"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 57,
+      "end_line": 58
+    }
+  },
+  "analysis.graph.callgraph_index.CallGraphIndex.all_callees": {
+    "fqn": "analysis.graph.callgraph_index.CallGraphIndex.all_callees",
+    "one_liner": "all_callees(self) does work related to 'all callees'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:60-61",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: sorted(self._reverse.keys())"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 60,
+      "end_line": 61
+    }
+  },
+  "analysis.graph.callgraph_index.CallGraphIndex.stats": {
+    "fqn": "analysis.graph.callgraph_index.CallGraphIndex.stats",
+    "one_liner": "stats(self) does work related to 'stats'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:63-69",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: {'unique_callers': len(self._forward), 'unique_callees': len(self._reverse), 'unresolved_calls': len(self._unresolved), 'total_calls': sum((len(v) for v in self._forward.values()))}"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 63,
+      "end_line": 69
+    }
+  },
+  "analysis.graph.callgraph_index.build_caller_fqn": {
+    "fqn": "analysis.graph.callgraph_index.build_caller_fqn",
+    "one_liner": "Convert a Phase-3/4 call record into a fully-qualified caller symbol name.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:76-86",
+      "Signature: Parameters: call, current_module",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: f'{current_module}.{caller}', f'{current_module}.{cls}.{caller}'"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 76,
+      "end_line": 86
+    }
+  },
+  "analysis.graph.callgraph_index.__init__": {
+    "fqn": "analysis.graph.callgraph_index.__init__",
+    "one_liner": "__init__() initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:29-32",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 29,
+      "end_line": 32
+    }
+  },
+  "analysis.graph.callgraph_index.add_call": {
+    "fqn": "analysis.graph.callgraph_index.add_call",
+    "one_liner": "add_call() does work related to 'add call'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:37-43",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 37,
+      "end_line": 43
+    }
+  },
+  "analysis.graph.callgraph_index.callees_of": {
+    "fqn": "analysis.graph.callgraph_index.callees_of",
+    "one_liner": "callees_of() does work related to 'callees of'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:48-49",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 48,
+      "end_line": 49
+    }
+  },
+  "analysis.graph.callgraph_index.callers_of": {
+    "fqn": "analysis.graph.callgraph_index.callers_of",
+    "one_liner": "callers_of() does work related to 'callers of'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:51-52",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 51,
+      "end_line": 52
+    }
+  },
+  "analysis.graph.callgraph_index.unresolved_calls": {
+    "fqn": "analysis.graph.callgraph_index.unresolved_calls",
+    "one_liner": "unresolved_calls() does work related to 'unresolved calls'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:54-55",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 54,
+      "end_line": 55
+    }
+  },
+  "analysis.graph.callgraph_index.all_callers": {
+    "fqn": "analysis.graph.callgraph_index.all_callers",
+    "one_liner": "all_callers() does work related to 'all callers'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:57-58",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 57,
+      "end_line": 58
+    }
+  },
+  "analysis.graph.callgraph_index.all_callees": {
+    "fqn": "analysis.graph.callgraph_index.all_callees",
+    "one_liner": "all_callees() does work related to 'all callees'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:60-61",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 60,
+      "end_line": 61
+    }
+  },
+  "analysis.graph.callgraph_index.stats": {
+    "fqn": "analysis.graph.callgraph_index.stats",
+    "one_liner": "stats() does work related to 'stats'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py:63-69",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\graph\\callgraph_index.py",
+      "start_line": 63,
+      "end_line": 69
+    }
+  },
+  "analysis.indexing.import_resolver.ResolvedImport": {
+    "fqn": "analysis.indexing.import_resolver.ResolvedImport",
+    "one_liner": "Represents a resolved import in a single file.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:13-19",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 13,
+      "end_line": 19
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver",
+    "one_liner": "Resolves raw import statements into fully-qualified references.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:26-180",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 26,
+      "end_line": 180
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver.__init__": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver.__init__",
+    "one_liner": "__init__(self, symbol_index) initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:32-35",
+      "Signature: Parameters: self, symbol_index",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 32,
+      "end_line": 35
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver.resolve_imports": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver.resolve_imports",
+    "one_liner": "Resolves all imports for a single file.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:40-60",
+      "Signature: Parameters: self, imports, current_module",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: resolved"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 40,
+      "end_line": 60
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver.index_module_imports": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver.index_module_imports",
+    "one_liner": "\u2705 NEW: Resolve and store imports for a module.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:62-69",
+      "Signature: Parameters: self, module_name, imports",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: resolved"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 62,
+      "end_line": 69
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver.get_imports": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver.get_imports",
+    "one_liner": "\u2705 NEW: Fetch resolved import map for a module.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:71-76",
+      "Signature: Parameters: self, module_name",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: self._imports_by_module.get(module_name, {})"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 71,
+      "end_line": 76
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver.clear_module": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver.clear_module",
+    "one_liner": "\u2705 Optional helper: remove cached imports for one module.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:78-84",
+      "Signature: Parameters: self, module_name",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 78,
+      "end_line": 84
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver.clear": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver.clear",
+    "one_liner": "\u2705 Optional helper: clears all cached imports.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:86-90",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 86,
+      "end_line": 90
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver.snapshot_imports_by_module": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver.snapshot_imports_by_module",
+    "one_liner": "snapshot_imports_by_module(self) does work related to 'snapshot imports by module'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:92-102",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: data"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 92,
+      "end_line": 102
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver.load_imports_by_module": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver.load_imports_by_module",
+    "one_liner": "load_imports_by_module(self, data) retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:104-114",
+      "Signature: Parameters: self, data",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 104,
+      "end_line": 114
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver._handle_import": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver._handle_import",
+    "one_liner": "Handles: import a.b.c as x",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:119-130",
+      "Signature: Parameters: self, imp, resolved",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 119,
+      "end_line": 130
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver._handle_from_import": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver._handle_from_import",
+    "one_liner": "Handles: from a.b import c as d",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:132-159",
+      "Signature: Parameters: self, imp, current_module, resolved",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 132,
+      "end_line": 159
+    }
+  },
+  "analysis.indexing.import_resolver.ImportResolver._resolve_relative_module": {
+    "fqn": "analysis.indexing.import_resolver.ImportResolver._resolve_relative_module",
+    "one_liner": "Resolves relative imports like:",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:161-180",
+      "Signature: Parameters: self, current_module, level, target_module",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: '.'.join(base), target_module or ''"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 161,
+      "end_line": 180
+    }
+  },
+  "analysis.indexing.import_resolver.__init__": {
+    "fqn": "analysis.indexing.import_resolver.__init__",
+    "one_liner": "__init__() initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:32-35",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 32,
+      "end_line": 35
+    }
+  },
+  "analysis.indexing.import_resolver.resolve_imports": {
+    "fqn": "analysis.indexing.import_resolver.resolve_imports",
+    "one_liner": "resolve_imports() does work related to 'resolve imports'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:40-60",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 40,
+      "end_line": 60
+    }
+  },
+  "analysis.indexing.import_resolver.index_module_imports": {
+    "fqn": "analysis.indexing.import_resolver.index_module_imports",
+    "one_liner": "index_module_imports() does work related to 'index module imports'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:62-69",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 62,
+      "end_line": 69
+    }
+  },
+  "analysis.indexing.import_resolver.get_imports": {
+    "fqn": "analysis.indexing.import_resolver.get_imports",
+    "one_liner": "get_imports() retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:71-76",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 71,
+      "end_line": 76
+    }
+  },
+  "analysis.indexing.import_resolver.clear_module": {
+    "fqn": "analysis.indexing.import_resolver.clear_module",
+    "one_liner": "clear_module() does work related to 'clear module'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:78-84",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 78,
+      "end_line": 84
+    }
+  },
+  "analysis.indexing.import_resolver.clear": {
+    "fqn": "analysis.indexing.import_resolver.clear",
+    "one_liner": "clear() does work related to 'clear'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:86-90",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 86,
+      "end_line": 90
+    }
+  },
+  "analysis.indexing.import_resolver.snapshot_imports_by_module": {
+    "fqn": "analysis.indexing.import_resolver.snapshot_imports_by_module",
+    "one_liner": "snapshot_imports_by_module() does work related to 'snapshot imports by module'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:92-102",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 92,
+      "end_line": 102
+    }
+  },
+  "analysis.indexing.import_resolver.load_imports_by_module": {
+    "fqn": "analysis.indexing.import_resolver.load_imports_by_module",
+    "one_liner": "load_imports_by_module() retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:104-114",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 104,
+      "end_line": 114
+    }
+  },
+  "analysis.indexing.import_resolver._handle_import": {
+    "fqn": "analysis.indexing.import_resolver._handle_import",
+    "one_liner": "_handle_import() does work related to 'handle import'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:119-130",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 119,
+      "end_line": 130
+    }
+  },
+  "analysis.indexing.import_resolver._handle_from_import": {
+    "fqn": "analysis.indexing.import_resolver._handle_from_import",
+    "one_liner": "_handle_from_import() does work related to 'handle from import'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:132-159",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 132,
+      "end_line": 159
+    }
+  },
+  "analysis.indexing.import_resolver._resolve_relative_module": {
+    "fqn": "analysis.indexing.import_resolver._resolve_relative_module",
+    "one_liner": "_resolve_relative_module() does work related to 'resolve relative module'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py:161-180",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\import_resolver.py",
+      "start_line": 161,
+      "end_line": 180
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolKind": {
+    "fqn": "analysis.indexing.symbol_index.SymbolKind",
+    "one_liner": "SymbolKind() does work related to 'SymbolKind'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:7-12",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 7,
+      "end_line": 12
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolInfo": {
+    "fqn": "analysis.indexing.symbol_index.SymbolInfo",
+    "one_liner": "Represents a single symbol definition in the codebase.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:16-31",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 16,
+      "end_line": 31
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex",
+    "one_liner": "Global registry of all symbols across the codebase.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:34-169",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 34,
+      "end_line": 169
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex.__init__": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex.__init__",
+    "one_liner": "__init__(self) initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:39-44",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 39,
+      "end_line": 44
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex.add_symbol": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex.add_symbol",
+    "one_liner": "add_symbol(self, symbol) does work related to 'add symbol'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:49-54",
+      "Signature: Parameters: self, symbol",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 49,
+      "end_line": 54
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex.index_file": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex.index_file",
+    "one_liner": "Index all symbols found in a single AST tree.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:59-105",
+      "Signature: Parameters: self, ast_tree, module, file_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 59,
+      "end_line": 105
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex.get_by_name": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex.get_by_name",
+    "one_liner": "get_by_name(self, name) retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:110-111",
+      "Signature: Parameters: self, name",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: self._by_name.get(name, [])"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 110,
+      "end_line": 111
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex.get": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex.get",
+    "one_liner": "get(self, module, qualified_name) retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:113-114",
+      "Signature: Parameters: self, module, qualified_name",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: self._by_fqn.get((module, qualified_name))"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 113,
+      "end_line": 114
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex.all_symbols": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex.all_symbols",
+    "one_liner": "all_symbols(self) does work related to 'all symbols'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:116-117",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: list(self._symbols)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 116,
+      "end_line": 117
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex.remove_by_file": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex.remove_by_file",
+    "one_liner": "remove_by_file(self, file_path) does work related to 'remove by file'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:122-128",
+      "Signature: Parameters: self, file_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 122,
+      "end_line": 128
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex.symbols_for_file": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex.symbols_for_file",
+    "one_liner": "symbols_for_file(self, file_path) does work related to 'symbols for file'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:130-131",
+      "Signature: Parameters: self, file_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: [s for s in self._symbols if s.file_path == file_path]"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 130,
+      "end_line": 131
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex.snapshot": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex.snapshot",
+    "one_liner": "snapshot(self) does work related to 'snapshot'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:133-147",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: [{'name': s.name, 'qualified_name': s.qualified_name, 'kind': s.kind.value, 'module': s.module, 'file_path': s.file_path, 'start_line': s.start_line, 'end_line': s.end_line, 'class_name': s.class_name, 'metadata': s.metadata} for s in self._symbols]"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 133,
+      "end_line": 147
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex.load_snapshot": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex.load_snapshot",
+    "one_liner": "load_snapshot(self, records) retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:149-164",
+      "Signature: Parameters: self, records",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 149,
+      "end_line": 164
+    }
+  },
+  "analysis.indexing.symbol_index.SymbolIndex.clear": {
+    "fqn": "analysis.indexing.symbol_index.SymbolIndex.clear",
+    "one_liner": "clear(self) does work related to 'clear'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:166-169",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 166,
+      "end_line": 169
+    }
+  },
+  "analysis.indexing.symbol_index.__init__": {
+    "fqn": "analysis.indexing.symbol_index.__init__",
+    "one_liner": "__init__() initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:39-44",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 39,
+      "end_line": 44
+    }
+  },
+  "analysis.indexing.symbol_index.add_symbol": {
+    "fqn": "analysis.indexing.symbol_index.add_symbol",
+    "one_liner": "add_symbol() does work related to 'add symbol'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:49-54",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 49,
+      "end_line": 54
+    }
+  },
+  "analysis.indexing.symbol_index.index_file": {
+    "fqn": "analysis.indexing.symbol_index.index_file",
+    "one_liner": "index_file() does work related to 'index file'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:59-105",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 59,
+      "end_line": 105
+    }
+  },
+  "analysis.indexing.symbol_index.get_by_name": {
+    "fqn": "analysis.indexing.symbol_index.get_by_name",
+    "one_liner": "get_by_name() retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:110-111",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 110,
+      "end_line": 111
+    }
+  },
+  "analysis.indexing.symbol_index.get": {
+    "fqn": "analysis.indexing.symbol_index.get",
+    "one_liner": "get() retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:113-114",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 113,
+      "end_line": 114
+    }
+  },
+  "analysis.indexing.symbol_index.all_symbols": {
+    "fqn": "analysis.indexing.symbol_index.all_symbols",
+    "one_liner": "all_symbols() does work related to 'all symbols'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:116-117",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 116,
+      "end_line": 117
+    }
+  },
+  "analysis.indexing.symbol_index.remove_by_file": {
+    "fqn": "analysis.indexing.symbol_index.remove_by_file",
+    "one_liner": "remove_by_file() does work related to 'remove by file'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:122-128",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 122,
+      "end_line": 128
+    }
+  },
+  "analysis.indexing.symbol_index.symbols_for_file": {
+    "fqn": "analysis.indexing.symbol_index.symbols_for_file",
+    "one_liner": "symbols_for_file() does work related to 'symbols for file'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:130-131",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 130,
+      "end_line": 131
+    }
+  },
+  "analysis.indexing.symbol_index.snapshot": {
+    "fqn": "analysis.indexing.symbol_index.snapshot",
+    "one_liner": "snapshot() does work related to 'snapshot'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:133-147",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 133,
+      "end_line": 147
+    }
+  },
+  "analysis.indexing.symbol_index.load_snapshot": {
+    "fqn": "analysis.indexing.symbol_index.load_snapshot",
+    "one_liner": "load_snapshot() retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:149-164",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 149,
+      "end_line": 164
+    }
+  },
+  "analysis.indexing.symbol_index.clear": {
+    "fqn": "analysis.indexing.symbol_index.clear",
+    "one_liner": "clear() does work related to 'clear'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py:166-169",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\indexing\\symbol_index.py",
+      "start_line": 166,
+      "end_line": 169
+    }
+  },
+  "analysis.runners.phase4_runner.collect_python_files": {
+    "fqn": "analysis.runners.phase4_runner.collect_python_files",
+    "one_liner": "collect_python_files(root_dir) does work related to 'collect python files'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py:20-33",
+      "Signature: Parameters: root_dir",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: py_files"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py",
+      "start_line": 20,
+      "end_line": 33
+    }
+  },
+  "analysis.runners.phase4_runner.parse_ast": {
+    "fqn": "analysis.runners.phase4_runner.parse_ast",
+    "one_liner": "parse_ast(file_path) does work related to 'parse ast'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py:36-38",
+      "Signature: Parameters: file_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: ast.parse(f.read())"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py",
+      "start_line": 36,
+      "end_line": 38
+    }
+  },
+  "analysis.runners.phase4_runner.file_to_module": {
+    "fqn": "analysis.runners.phase4_runner.file_to_module",
+    "one_liner": "file_to_module(file_path, repo_root) does work related to 'file to module'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py:41-51",
+      "Signature: Parameters: file_path, repo_root",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: f'{repo_name}.{rel}'"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py",
+      "start_line": 41,
+      "end_line": 51
+    }
+  },
+  "analysis.runners.phase4_runner._load_previous_resolved_calls": {
+    "fqn": "analysis.runners.phase4_runner._load_previous_resolved_calls",
+    "one_liner": "_load_previous_resolved_calls(path) retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py:54-59",
+      "Signature: Parameters: path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: data if isinstance(data, list) else [], []"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py",
+      "start_line": 54,
+      "end_line": 59
+    }
+  },
+  "analysis.runners.phase4_runner._rel_to_abs": {
+    "fqn": "analysis.runners.phase4_runner._rel_to_abs",
+    "one_liner": "_rel_to_abs(repo_dir, rel_path) does work related to 'rel to abs'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py:62-63",
+      "Signature: Parameters: repo_dir, rel_path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: os.path.abspath(os.path.join(repo_dir, rel_path.replace('/', os.sep)))"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py",
+      "start_line": 62,
+      "end_line": 63
+    }
+  },
+  "analysis.runners.phase4_runner.run": {
+    "fqn": "analysis.runners.phase4_runner.run",
+    "one_liner": "Phase-4 pipeline callable from CLI/VS Code.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py:66-200",
+      "Signature: Parameters: repo_dir, output_dir",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: {'resolved_calls_path': resolved_calls_path, 'total_calls': len(resolved_calls), 'incremental': not full_rebuild, 'reindexed_files': len(changed_existing_abs) if not full_rebuild else len(python_files), 'impacted_files': len(impacted_files), 'changed_files_detected': len(changed_rel_files), 'symbol_snapshot': symbol_index.snapshot(), 'imports_snapshot': import_resolver.snapshot_imports_by_module(), 'file_module_map': file_module_map}"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py",
+      "start_line": 66,
+      "end_line": 200
+    }
+  },
+  "analysis.runners.phase4_runner.main": {
+    "fqn": "analysis.runners.phase4_runner.main",
+    "one_liner": "main() does work related to 'main'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py:203-208",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\runners\\phase4_runner.py",
+      "start_line": 203,
+      "end_line": 208
+    }
+  },
+  "analysis.scanner.repo_loader.load_repository": {
+    "fqn": "analysis.scanner.repo_loader.load_repository",
+    "one_liner": "load_repository(root_path, stats) retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\scanner\\repo_loader.py:5-30",
+      "Signature: Parameters: root_path, stats",
+      "Called by: analysis.scanner.repo_loader.load_repository",
+      "Calls: load_repository()",
+      "Returns: a variable value. Examples: tree"
+    ],
+    "tags": [
+      "io:read"
+    ],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\scanner\\repo_loader.py",
+      "start_line": 5,
+      "end_line": 30
+    }
+  },
+  "analysis.testing_repo.test.introduction1": {
+    "fqn": "analysis.testing_repo.test.introduction1",
+    "one_liner": "introduction1() does work related to 'introduction1'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:3-4",
+      "Called by: (no callers found)",
+      "Calls: print()",
+      "Returns: None."
+    ],
+    "tags": [
+      "io:print"
+    ],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 3,
+      "end_line": 4
+    }
+  },
+  "analysis.testing_repo.test.Student1": {
+    "fqn": "analysis.testing_repo.test.Student1",
+    "one_liner": "Student1() does work related to 'Student1'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:6-22",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 6,
+      "end_line": 22
+    }
+  },
+  "analysis.testing_repo.test.Student1.__init__": {
+    "fqn": "analysis.testing_repo.test.Student1.__init__",
+    "one_liner": "__init__(self) initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:7-11",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: info1()",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 7,
+      "end_line": 11
+    }
+  },
+  "analysis.testing_repo.test.Student1.info1": {
+    "fqn": "analysis.testing_repo.test.Student1.info1",
+    "one_liner": "info1(self) orchestrates display operations.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:13-17",
+      "Signature: Parameters: self",
+      "Called by: analysis.testing_repo.test.Student1.__init__",
+      "Calls: display()",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 13,
+      "end_line": 17
+    }
+  },
+  "analysis.testing_repo.test.Student1.display1": {
+    "fqn": "analysis.testing_repo.test.Student1.display1",
+    "one_liner": "display1(self) displays information to console.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:19-22",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: print() x3",
+      "Returns: None."
+    ],
+    "tags": [
+      "io:print"
+    ],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 19,
+      "end_line": 22
+    }
+  },
+  "analysis.testing_repo.test.introduction": {
+    "fqn": "analysis.testing_repo.test.introduction",
+    "one_liner": "Prints an intro message.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:40-42",
+      "Called by: (no callers found)",
+      "Calls: print()",
+      "Returns: None."
+    ],
+    "tags": [
+      "io:print"
+    ],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 40,
+      "end_line": 42
+    }
+  },
+  "analysis.testing_repo.test.Student": {
+    "fqn": "analysis.testing_repo.test.Student",
+    "one_liner": "Represents a student.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:44-53",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 44,
+      "end_line": 53
+    }
+  },
+  "analysis.testing_repo.test.Student.info": {
+    "fqn": "analysis.testing_repo.test.Student.info",
+    "one_liner": "Calls display() to show student details.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:47-49",
+      "Signature: Parameters: self",
+      "Called by: (no callers found)",
+      "Calls: display()",
+      "Returns: None."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 47,
+      "end_line": 49
+    }
+  },
+  "analysis.testing_repo.test.Student.display": {
+    "fqn": "analysis.testing_repo.test.Student.display",
+    "one_liner": "Prints student details.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:51-53",
+      "Signature: Parameters: self",
+      "Called by: analysis.testing_repo.test.Student.info",
+      "Calls: print()",
+      "Returns: None."
+    ],
+    "tags": [
+      "io:print"
+    ],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 51,
+      "end_line": 53
+    }
+  },
+  "analysis.testing_repo.test.demo": {
+    "fqn": "analysis.testing_repo.test.demo",
+    "one_liner": "demo(a, b, *, c, **kw) does work related to 'demo'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:56-57",
+      "Signature: Parameters: a, b; Keyword-only: c; **kwargs: kw",
+      "Called by: (no callers found)",
+      "Calls: str()",
+      "Returns: result of a call. Examples: str(a + b)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 56,
+      "end_line": 57
+    }
+  },
+  "analysis.testing_repo.test.r1": {
+    "fqn": "analysis.testing_repo.test.r1",
+    "one_liner": "r1() does work related to 'r1'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:60-61",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None. Examples: None"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 60,
+      "end_line": 61
+    }
+  },
+  "analysis.testing_repo.test.r2": {
+    "fqn": "analysis.testing_repo.test.r2",
+    "one_liner": "r2() does work related to 'r2'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:63-64",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: None. Examples: None"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 63,
+      "end_line": 64
+    }
+  },
+  "analysis.testing_repo.test.r3": {
+    "fqn": "analysis.testing_repo.test.r3",
+    "one_liner": "r3() does work related to 'r3'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:66-67",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a constant. Examples: 5"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 66,
+      "end_line": 67
+    }
+  },
+  "analysis.testing_repo.test.r4": {
+    "fqn": "analysis.testing_repo.test.r4",
+    "one_liner": "r4() does work related to 'r4'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:69-71",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: x"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 69,
+      "end_line": 71
+    }
+  },
+  "analysis.testing_repo.test.r5": {
+    "fqn": "analysis.testing_repo.test.r5",
+    "one_liner": "r5(a, b) does work related to 'r5'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:73-74",
+      "Signature: Parameters: a, b",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: a + b"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 73,
+      "end_line": 74
+    }
+  },
+  "analysis.testing_repo.test.r6": {
+    "fqn": "analysis.testing_repo.test.r6",
+    "one_liner": "r6() does work related to 'r6'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:76-77",
+      "Called by: (no callers found)",
+      "Calls: str()",
+      "Returns: result of a call. Examples: str(123)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 76,
+      "end_line": 77
+    }
+  },
+  "analysis.testing_repo.test.__init__": {
+    "fqn": "analysis.testing_repo.test.__init__",
+    "one_liner": "__init__() initializes the object.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:7-11",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 7,
+      "end_line": 11
+    }
+  },
+  "analysis.testing_repo.test.info1": {
+    "fqn": "analysis.testing_repo.test.info1",
+    "one_liner": "info1() does work related to 'info1'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:13-17",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 13,
+      "end_line": 17
+    }
+  },
+  "analysis.testing_repo.test.display1": {
+    "fqn": "analysis.testing_repo.test.display1",
+    "one_liner": "display1() displays information.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:19-22",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 19,
+      "end_line": 22
+    }
+  },
+  "analysis.testing_repo.test.info": {
+    "fqn": "analysis.testing_repo.test.info",
+    "one_liner": "info() does work related to 'info'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:47-49",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 47,
+      "end_line": 49
+    }
+  },
+  "analysis.testing_repo.test.display": {
+    "fqn": "analysis.testing_repo.test.display",
+    "one_liner": "display() displays information.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:51-53",
+      "Called by: analysis.testing_repo.test.Student1.info1",
+      "Calls: (no callees found)",
+      "Returns: unknown."
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "start_line": 51,
+      "end_line": 53
+    }
+  },
+  "analysis.utils.cache_manager._project_root": {
+    "fqn": "analysis.utils.cache_manager._project_root",
+    "one_liner": "_project_root() does work related to 'project root'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py:20-21",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: os.path.dirname(os.path.dirname(os.path.dirname(__file__)))"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py",
+      "start_line": 20,
+      "end_line": 21
+    }
+  },
+  "analysis.utils.cache_manager._manifest_path": {
+    "fqn": "analysis.utils.cache_manager._manifest_path",
+    "one_liner": "_manifest_path(path) does work related to 'manifest path'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py:24-25",
+      "Signature: Parameters: path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: os.path.join(get_cache_dir(path), 'manifest.json')"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py",
+      "start_line": 24,
+      "end_line": 25
+    }
+  },
+  "analysis.utils.cache_manager.compute_repo_hash": {
+    "fqn": "analysis.utils.cache_manager.compute_repo_hash",
+    "one_liner": "compute_repo_hash(path) performs calculations or transformations.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py:28-31",
+      "Signature: Parameters: path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: digest[:16]"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py",
+      "start_line": 28,
+      "end_line": 31
+    }
+  },
+  "analysis.utils.cache_manager.get_cache_dir": {
+    "fqn": "analysis.utils.cache_manager.get_cache_dir",
+    "one_liner": "get_cache_dir(path) retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py:34-35",
+      "Signature: Parameters: path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: os.path.join(_project_root(), '.codemap_cache', compute_repo_hash(path))"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py",
+      "start_line": 34,
+      "end_line": 35
+    }
+  },
+  "analysis.utils.cache_manager.collect_fingerprints": {
+    "fqn": "analysis.utils.cache_manager.collect_fingerprints",
+    "one_liner": "collect_fingerprints(path) displays information.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py:38-55",
+      "Signature: Parameters: path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: dict(sorted(fingerprints.items(), key=lambda x: x[0]))"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py",
+      "start_line": 38,
+      "end_line": 55
+    }
+  },
+  "analysis.utils.cache_manager.diff_fingerprints": {
+    "fqn": "analysis.utils.cache_manager.diff_fingerprints",
+    "one_liner": "diff_fingerprints(old, new) displays information.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py:58-77",
+      "Signature: Parameters: old, new",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: {'added': added, 'removed': removed, 'modified': modified, 'changed_files': len(added) + len(removed) + len(modified)}"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py",
+      "start_line": 58,
+      "end_line": 77
+    }
+  },
+  "analysis.utils.cache_manager.load_manifest": {
+    "fqn": "analysis.utils.cache_manager.load_manifest",
+    "one_liner": "load_manifest(path) retrieves or loads data.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py:80-85",
+      "Signature: Parameters: path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: result of a call. Examples: {}, json.load(f)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py",
+      "start_line": 80,
+      "end_line": 85
+    }
+  },
+  "analysis.utils.cache_manager.save_manifest": {
+    "fqn": "analysis.utils.cache_manager.save_manifest",
+    "one_liner": "save_manifest(path, manifest) saves manifest.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py:88-94",
+      "Signature: Parameters: path, manifest",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: manifest_path"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py",
+      "start_line": 88,
+      "end_line": 94
+    }
+  },
+  "analysis.utils.cache_manager.should_rebuild": {
+    "fqn": "analysis.utils.cache_manager.should_rebuild",
+    "one_liner": "should_rebuild(path) does work related to 'should rebuild'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py:97-111",
+      "Signature: Parameters: path",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: computed value. Examples: not (os.path.exists(resolved_calls_path) and os.path.exists(explain_path)), True"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py",
+      "start_line": 97,
+      "end_line": 111
+    }
+  },
+  "analysis.utils.cache_manager.build_manifest": {
+    "fqn": "analysis.utils.cache_manager.build_manifest",
+    "one_liner": "build_manifest(path, fingerprints, metadata) builds manifest.",
+    "details": [
+      "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py:114-133",
+      "Signature: Parameters: path, fingerprints, metadata",
+      "Called by: (no callers found)",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: manifest"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\utils\\cache_manager.py",
+      "start_line": 114,
+      "end_line": 133
+    }
+  }
+}
