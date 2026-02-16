@@ -1,0 +1,238 @@
+{
+  "ok": true,
+  "repo_prefix": "demo_repo",
+  "repo": {
+    "total_nodes": 20,
+    "dead_symbols": [],
+    "orchestrators": [
+      "demo_repo.hyperparameter_log.<module>"
+    ],
+    "critical_symbols": [],
+    "top_fan_in": [
+      {
+        "fqn": "demo_repo.hyperparameter_log.<module>",
+        "fan_in": 0
+      }
+    ],
+    "top_fan_out": [
+      {
+        "fqn": "demo_repo.hyperparameter_log.<module>",
+        "fan_out": 19
+      }
+    ]
+  },
+  "symbols": {
+    "builtins.len": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "builtin",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "builtins.print": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "builtin",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "builtins.range": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "builtin",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "demo_repo.hyperparameter_log.<module>": {
+      "fan_in": 0,
+      "fan_out": 19,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\demo_repo\\hyperparameter_log.py",
+        "start_line": 1,
+        "end_line": 67
+      }
+    },
+    "external::DataFrame": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::GridSearchCV": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::RandomForestClassifier": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::fit": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::from_pandas": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::infer_signature": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::load_iris": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::log_artifact": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::log_input": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::log_metric": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::log_model": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::log_params": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::predict": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::set_experiment": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::start_run": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "external::train_test_split": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "external",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    }
+  },
+  "files": {
+    "D:\\pythonFiles\\code_assist_phase2\\demo_repo\\hyperparameter_log.py": {
+      "incoming_symbols": 0,
+      "outgoing_symbols": 1,
+      "edges": 24
+    }
+  },
+  "thresholds": {
+    "fanout_threshold": 10,
+    "fanin_threshold": 10,
+    "top_k": 25
+  }
+}

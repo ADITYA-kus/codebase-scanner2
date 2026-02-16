@@ -524,6 +524,40 @@ def api_meta(repo: Optional[str] = Query(default=None)):
     }
 
 
+@app.get("/api/architecture")
+def api_architecture(repo: Optional[str] = Query(default=None)):
+    ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
+    if not _has_analysis_cache(ctx):
+        return _missing_cache_response()
+
+    architecture_metrics_path = os.path.join(ctx["cache_dir"], "architecture_metrics.json")
+    dependency_cycles_path = os.path.join(ctx["cache_dir"], "dependency_cycles.json")
+
+    missing = []
+    if not os.path.exists(architecture_metrics_path):
+        missing.append("architecture_metrics.json")
+    if not os.path.exists(dependency_cycles_path):
+        missing.append("dependency_cycles.json")
+    if missing:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "error": "MISSING_ARCHITECTURE_CACHE",
+                "message": "Run: python cli.py api analyze --path <repo>",
+                "missing_files": missing,
+            },
+        )
+
+    return {
+        "ok": True,
+        "architecture_metrics": _load_json(architecture_metrics_path, {}),
+        "dependency_cycles": _load_json(dependency_cycles_path, {}),
+    }
+
+
 @app.get("/api/tree")
 def api_tree(repo: Optional[str] = Query(default=None)):
     ctx = _repo_ctx(repo) if repo else _active_repo_ctx()

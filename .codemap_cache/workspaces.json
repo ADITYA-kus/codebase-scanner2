@@ -1,5 +1,5 @@
 {
-  "active_repo_hash": "be437f3ff94b8461",
+  "active_repo_hash": "a96e197ce6783462",
   "repos": [
     {
       "name": "testing_repo",
@@ -11,13 +11,13 @@
       "name": "demo_repo",
       "path": "D:\\pythonFiles\\code_assist_phase2\\demo_repo",
       "repo_hash": "a96e197ce6783462",
-      "last_opened": "2026-02-16T13:42:22.241641Z"
+      "last_opened": "2026-02-16T17:40:34.408322Z"
     },
     {
       "name": "testing_repo",
       "path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo",
       "repo_hash": "5da3375f09ca77e6",
-      "last_opened": "2026-02-16T13:54:56.168266Z"
+      "last_opened": "2026-02-16T16:16:07.801498Z"
     },
     {
       "name": "portfolio",

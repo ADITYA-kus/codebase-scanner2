@@ -1,0 +1,462 @@
+{
+  "ok": true,
+  "repo_prefix": "testing_repo",
+  "repo": {
+    "total_nodes": 24,
+    "dead_symbols": [
+      "testing_repo.test.Student",
+      "testing_repo.test.Student.info",
+      "testing_repo.test.Student1.__init__",
+      "testing_repo.test.Student1.display1",
+      "testing_repo.test.__init__",
+      "testing_repo.test.demo",
+      "testing_repo.test.display1",
+      "testing_repo.test.info",
+      "testing_repo.test.info1",
+      "testing_repo.test.introduction",
+      "testing_repo.test.introduction1",
+      "testing_repo.test.r1",
+      "testing_repo.test.r2",
+      "testing_repo.test.r3",
+      "testing_repo.test.r4",
+      "testing_repo.test.r5",
+      "testing_repo.test.r6"
+    ],
+    "orchestrators": [],
+    "critical_symbols": [],
+    "top_fan_in": [
+      {
+        "fqn": "testing_repo.test.Student.display",
+        "fan_in": 1
+      },
+      {
+        "fqn": "testing_repo.test.Student1",
+        "fan_in": 1
+      },
+      {
+        "fqn": "testing_repo.test.Student1.info1",
+        "fan_in": 1
+      },
+      {
+        "fqn": "testing_repo.test.display",
+        "fan_in": 1
+      },
+      {
+        "fqn": "testing_repo.test.<module>",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.Student",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.Student.info",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.Student1.__init__",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.Student1.display1",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.__init__",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.demo",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.display1",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.info",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.info1",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.introduction",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.introduction1",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.r1",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.r2",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.r3",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.r4",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.r5",
+        "fan_in": 0
+      },
+      {
+        "fqn": "testing_repo.test.r6",
+        "fan_in": 0
+      }
+    ],
+    "top_fan_out": [
+      {
+        "fqn": "testing_repo.test.<module>",
+        "fan_out": 1
+      },
+      {
+        "fqn": "testing_repo.test.Student.display",
+        "fan_out": 1
+      },
+      {
+        "fqn": "testing_repo.test.Student.info",
+        "fan_out": 1
+      },
+      {
+        "fqn": "testing_repo.test.Student1.__init__",
+        "fan_out": 1
+      },
+      {
+        "fqn": "testing_repo.test.Student1.display1",
+        "fan_out": 1
+      },
+      {
+        "fqn": "testing_repo.test.Student1.info1",
+        "fan_out": 1
+      },
+      {
+        "fqn": "testing_repo.test.demo",
+        "fan_out": 1
+      },
+      {
+        "fqn": "testing_repo.test.introduction",
+        "fan_out": 1
+      },
+      {
+        "fqn": "testing_repo.test.introduction1",
+        "fan_out": 1
+      },
+      {
+        "fqn": "testing_repo.test.r6",
+        "fan_out": 1
+      },
+      {
+        "fqn": "testing_repo.test.Student",
+        "fan_out": 0
+      },
+      {
+        "fqn": "testing_repo.test.Student1",
+        "fan_out": 0
+      },
+      {
+        "fqn": "testing_repo.test.__init__",
+        "fan_out": 0
+      },
+      {
+        "fqn": "testing_repo.test.display",
+        "fan_out": 0
+      },
+      {
+        "fqn": "testing_repo.test.display1",
+        "fan_out": 0
+      },
+      {
+        "fqn": "testing_repo.test.info",
+        "fan_out": 0
+      },
+      {
+        "fqn": "testing_repo.test.info1",
+        "fan_out": 0
+      },
+      {
+        "fqn": "testing_repo.test.r1",
+        "fan_out": 0
+      },
+      {
+        "fqn": "testing_repo.test.r2",
+        "fan_out": 0
+      },
+      {
+        "fqn": "testing_repo.test.r3",
+        "fan_out": 0
+      },
+      {
+        "fqn": "testing_repo.test.r4",
+        "fan_out": 0
+      },
+      {
+        "fqn": "testing_repo.test.r5",
+        "fan_out": 0
+      }
+    ]
+  },
+  "symbols": {
+    "builtins.print": {
+      "fan_in": 4,
+      "fan_out": 0,
+      "kind": "builtin",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "builtins.str": {
+      "fan_in": 2,
+      "fan_out": 0,
+      "kind": "builtin",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "testing_repo.test.<module>": {
+      "fan_in": 0,
+      "fan_out": 1,
+      "kind": "local",
+      "location": {
+        "file": "",
+        "start_line": -1,
+        "end_line": -1
+      }
+    },
+    "testing_repo.test.Student": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 44,
+        "end_line": 53
+      }
+    },
+    "testing_repo.test.Student.display": {
+      "fan_in": 1,
+      "fan_out": 1,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 51,
+        "end_line": 53
+      }
+    },
+    "testing_repo.test.Student.info": {
+      "fan_in": 0,
+      "fan_out": 1,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 47,
+        "end_line": 49
+      }
+    },
+    "testing_repo.test.Student1": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 6,
+        "end_line": 22
+      }
+    },
+    "testing_repo.test.Student1.__init__": {
+      "fan_in": 0,
+      "fan_out": 1,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 7,
+        "end_line": 11
+      }
+    },
+    "testing_repo.test.Student1.display1": {
+      "fan_in": 0,
+      "fan_out": 1,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 19,
+        "end_line": 22
+      }
+    },
+    "testing_repo.test.Student1.info1": {
+      "fan_in": 1,
+      "fan_out": 1,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 13,
+        "end_line": 17
+      }
+    },
+    "testing_repo.test.__init__": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 7,
+        "end_line": 11
+      }
+    },
+    "testing_repo.test.demo": {
+      "fan_in": 0,
+      "fan_out": 1,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 56,
+        "end_line": 57
+      }
+    },
+    "testing_repo.test.display": {
+      "fan_in": 1,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 51,
+        "end_line": 53
+      }
+    },
+    "testing_repo.test.display1": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 19,
+        "end_line": 22
+      }
+    },
+    "testing_repo.test.info": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 47,
+        "end_line": 49
+      }
+    },
+    "testing_repo.test.info1": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 13,
+        "end_line": 17
+      }
+    },
+    "testing_repo.test.introduction": {
+      "fan_in": 0,
+      "fan_out": 1,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 40,
+        "end_line": 42
+      }
+    },
+    "testing_repo.test.introduction1": {
+      "fan_in": 0,
+      "fan_out": 1,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 3,
+        "end_line": 4
+      }
+    },
+    "testing_repo.test.r1": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 60,
+        "end_line": 61
+      }
+    },
+    "testing_repo.test.r2": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 63,
+        "end_line": 64
+      }
+    },
+    "testing_repo.test.r3": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 66,
+        "end_line": 67
+      }
+    },
+    "testing_repo.test.r4": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 69,
+        "end_line": 71
+      }
+    },
+    "testing_repo.test.r5": {
+      "fan_in": 0,
+      "fan_out": 0,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 73,
+        "end_line": 74
+      }
+    },
+    "testing_repo.test.r6": {
+      "fan_in": 0,
+      "fan_out": 1,
+      "kind": "local",
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 76,
+        "end_line": 77
+      }
+    }
+  },
+  "files": {
+    "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py": {
+      "incoming_symbols": 4,
+      "outgoing_symbols": 10,
+      "edges": 12
+    }
+  },
+  "thresholds": {
+    "fanout_threshold": 10,
+    "fanin_threshold": 10,
+    "top_k": 25
+  }
+}

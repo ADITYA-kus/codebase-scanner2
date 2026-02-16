@@ -11,8 +11,10 @@
   const searchResultsEl = document.getElementById("symbol-search-results");
   const tabDetailsEl = document.getElementById("tab-details");
   const tabGraphEl = document.getElementById("tab-graph");
+  const tabArchitectureEl = document.getElementById("tab-architecture");
   const graphControlsEl = document.getElementById("graph-controls");
   const graphViewEl = document.getElementById("graph-view");
+  const architectureViewEl = document.getElementById("architecture-view");
   const graphModeEl = document.getElementById("graph-mode");
   const graphDepthEl = document.getElementById("graph-depth");
   const graphHideBuiltinsEl = document.getElementById("graph-hide-builtins");
@@ -38,6 +40,7 @@
   let lastSymbol = "";
   let activeTab = "details";
   let graphDataCache = new Map();
+  let architectureCache = null;
 
   function withRepo(path) {
     return new URL(path, window.location.origin).toString();
@@ -102,12 +105,15 @@
     fileViewEl.classList.add("muted");
     symbolViewEl.classList.add("muted");
     graphViewEl.classList.add("muted");
+    architectureViewEl.classList.add("muted");
     fileViewEl.textContent = message || "Select a file from the tree.";
     symbolViewEl.textContent = "Select a symbol to view summary and usages.";
     graphViewEl.textContent = "Select a symbol to view graph.";
+    architectureViewEl.textContent = "Select a repository to view architecture insights.";
     recentSymbols = [];
     recentFiles = [];
     lastSymbol = "";
+    architectureCache = null;
     renderRecents();
   }
 
@@ -122,15 +128,119 @@
   }
 
   function setActiveTab(tab) {
-    activeTab = tab === "graph" ? "graph" : "details";
+    activeTab = tab === "graph" || tab === "architecture" ? tab : "details";
     const isGraph = activeTab === "graph";
-    if (tabDetailsEl) tabDetailsEl.classList.toggle("active", !isGraph);
+    const isArchitecture = activeTab === "architecture";
+    if (tabDetailsEl) tabDetailsEl.classList.toggle("active", activeTab === "details");
     if (tabGraphEl) tabGraphEl.classList.toggle("active", isGraph);
-    if (symbolViewEl) symbolViewEl.classList.toggle("hidden", isGraph);
+    if (tabArchitectureEl) tabArchitectureEl.classList.toggle("active", isArchitecture);
+    if (symbolViewEl) symbolViewEl.classList.toggle("hidden", activeTab !== "details");
     if (graphViewEl) graphViewEl.classList.toggle("hidden", !isGraph);
+    if (architectureViewEl) architectureViewEl.classList.toggle("hidden", !isArchitecture);
     if (graphControlsEl) graphControlsEl.classList.toggle("hidden", !isGraph);
     if (isGraph) {
       loadGraph();
+    }
+    if (isArchitecture) {
+      loadArchitecture();
+    }
+  }
+
+  function shortLabel(fqn) {
+    const parts = String(fqn || "").split(".");
+    if (parts.length >= 2) return `${parts[parts.length - 2]}.${parts[parts.length - 1]}`;
+    return parts[parts.length - 1] || fqn;
+  }
+
+  function basename(path) {
+    return String(path || "").replace(/\\/g, "/").split("/").pop() || "";
+  }
+
+  function renderSymbolList(rows, symbolsMap, emptyText) {
+    if (!rows.length) return `<div class="muted">${esc(emptyText)}</div>`;
+    return rows.slice(0, 25).map((entry) => {
+      const fqn = typeof entry === "string" ? entry : entry.fqn;
+      const info = symbolsMap[fqn] || {};
+      const location = info.location || {};
+      return `<button class="arch-row" data-fqn="${esc(fqn)}">
+        <span class="arch-name">${esc(shortLabel(fqn))}</span>
+        <span class="path">in:${esc(info.fan_in ?? 0)} out:${esc(info.fan_out ?? 0)} ${esc(basename(location.file || ""))}</span>
+      </button>`;
+    }).join("");
+  }
+
+  async function loadArchitecture() {
+    if (!architectureViewEl) return;
+    architectureViewEl.classList.remove("muted");
+    architectureViewEl.innerHTML = "<div class='card'>Loading architecture insights...</div>";
+    try {
+      if (!architectureCache) {
+        architectureCache = await fetchJson("/api/architecture");
+      }
+      const arch = architectureCache.architecture_metrics || {};
+      const dep = architectureCache.dependency_cycles || {};
+      const repo = arch.repo || {};
+      const symbolsMap = arch.symbols || {};
+
+      const orchestrators = (repo.orchestrators && repo.orchestrators.length ? repo.orchestrators : (repo.top_fan_out || []).map((x) => x.fqn || x)).filter(Boolean);
+      const critical = (repo.critical_symbols && repo.critical_symbols.length ? repo.critical_symbols : (repo.top_fan_in || []).map((x) => x.fqn || x)).filter(Boolean);
+      const dead = (repo.dead_symbols || []).filter(Boolean);
+      const cycles = dep.cycles || [];
+
+      architectureViewEl.innerHTML = `
+        <div class="arch-grid">
+          <div class="kpi-card"><div class="kpi-label">Orchestrators</div><div class="kpi-value">${orchestrators.length}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Critical APIs</div><div class="kpi-value">${critical.length}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Dead Symbols</div><div class="kpi-value">${dead.length}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Dependency Cycles</div><div class="kpi-value">${dep.cycle_count || 0}</div></div>
+        </div>
+        <div class="card">
+          <div class="section-title">Top Orchestrators</div>
+          ${renderSymbolList(orchestrators, symbolsMap, "No orchestrators detected.")}
+        </div>
+        <div class="card">
+          <div class="section-title">Top Critical Symbols</div>
+          ${renderSymbolList(critical, symbolsMap, "No critical symbols detected.")}
+        </div>
+        <div class="card">
+          <div class="section-title">Dead Symbols</div>
+          ${renderSymbolList(dead, symbolsMap, "No dead symbols detected.")}
+        </div>
+        <div class="card">
+          <div class="section-title">Dependency Cycles</div>
+          ${dep.cycle_count ? cycles.slice(0, 50).map((c, i) => `<div class="cycle-row"><span>${esc(c.join(" -> "))}</span><button class="copy-cycle" data-cycle="${esc(c.join(" -> "))}">Copy</button></div>`).join("") : "<div class='ok-cycle'>No cycles detected ✅</div>"}
+        </div>
+      `;
+
+      architectureViewEl.querySelectorAll(".arch-row").forEach((el) => {
+        el.addEventListener("click", async () => {
+          const fqn = el.getAttribute("data-fqn");
+          if (!fqn) return;
+          setActiveTab("details");
+          await loadSymbol(fqn);
+        });
+      });
+      architectureViewEl.querySelectorAll(".copy-cycle").forEach((el) => {
+        el.addEventListener("click", async () => {
+          const text = el.getAttribute("data-cycle") || "";
+          try {
+            await navigator.clipboard.writeText(text);
+            el.textContent = "Copied";
+            window.setTimeout(() => { el.textContent = "Copy"; }, 800);
+          } catch (_e) {
+            // noop
+          }
+        });
+      });
+    } catch (e) {
+      architectureViewEl.classList.remove("muted");
+      architectureViewEl.innerHTML = `
+        <div class="card arch-missing">
+          <div class="section-title">Architecture Insights Unavailable</div>
+          <div>${esc((e && (e.message || e.error)) || "Missing architecture cache artifacts.")}</div>
+          <div class="path">Run: python cli.py api analyze --path &lt;repo&gt;</div>
+        </div>
+      `;
     }
   }
 
@@ -652,6 +762,7 @@
   function bindGraphControls() {
     if (tabDetailsEl) tabDetailsEl.addEventListener("click", () => setActiveTab("details"));
     if (tabGraphEl) tabGraphEl.addEventListener("click", () => setActiveTab("graph"));
+    if (tabArchitectureEl) tabArchitectureEl.addEventListener("click", () => setActiveTab("architecture"));
     const rerender = () => {
       graphDataCache.clear();
       if (activeTab === "graph") loadGraph();
@@ -852,6 +963,7 @@
 
   async function refreshForActiveRepo() {
     clearWorkspaceView("Loading workspace...");
+    architectureCache = null;
     const okMeta = await loadMeta();
     if (!okMeta) return;
     await loadTree();

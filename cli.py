@@ -332,7 +332,10 @@ def api_llm_explain(args) -> int:
 def api_analyze(args) -> int:
     from analysis.runners.phase4_runner import run as run_phase4
     from analysis.explain.explain_runner import run as run_explain
-    from analysis.graph.callgraph_index import write_hub_metrics_from_resolved_calls
+    from analysis.graph.callgraph_index import CallGraphIndex, CallSite, write_hub_metrics_from_resolved_calls
+    from analysis.indexing.symbol_index import SymbolIndex
+    from analysis.architecture.architecture_engine import compute_architecture_metrics
+    from analysis.architecture.dependency_cycles import compute_dependency_cycle_metrics
     from analysis.utils.cache_manager import (
         build_manifest,
         collect_fingerprints,
@@ -350,6 +353,8 @@ def api_analyze(args) -> int:
     resolved_calls_path = os.path.join(cache_dir, "resolved_calls.json")
     explain_path = os.path.join(cache_dir, "explain.json")
     analysis_metrics_path = os.path.join(cache_dir, "analysis_metrics.json")
+    architecture_metrics_path = os.path.join(cache_dir, "architecture_metrics.json")
+    dependency_cycles_path = os.path.join(cache_dir, "dependency_cycles.json")
     llm_cache_path = os.path.join(cache_dir, "llm_cache.json")
     project_tree_path = os.path.join(cache_dir, "project_tree.json")
 
@@ -360,6 +365,10 @@ def api_analyze(args) -> int:
     version_mismatch = previous_manifest.get("analysis_version") != ANALYSIS_VERSION
 
     rebuild_required = should_rebuild(repo_dir, analysis_version=ANALYSIS_VERSION)
+    derived_missing = (
+        not os.path.exists(architecture_metrics_path)
+        or not os.path.exists(dependency_cycles_path)
+    )
     r1 = {}
     r2 = {}
     metrics = {}
@@ -406,6 +415,49 @@ def api_analyze(args) -> int:
                 tree_snapshot = _build_project_tree_snapshot(repo_dir)
                 with open(project_tree_path, "w", encoding="utf-8") as f:
                     json.dump(tree_snapshot, f, indent=2)
+
+        # Derived architecture outputs:
+        # - regenerate on rebuild
+        # - or on cached runs when derived files are missing
+        if rebuild_required or derived_missing:
+            with open(resolved_calls_path, "r", encoding="utf-8") as f:
+                resolved_calls = json.load(f)
+
+            callgraph = CallGraphIndex()
+            for c in resolved_calls:
+                caller_fqn = c.get("caller_fqn")
+                if not caller_fqn:
+                    continue
+                callgraph.add_call(
+                    CallSite(
+                        caller_fqn=caller_fqn,
+                        callee_fqn=c.get("callee_fqn"),
+                        callee_name=c.get("callee", "<unknown>"),
+                        file=c.get("file", ""),
+                        line=int(c.get("line", -1)),
+                    )
+                )
+
+            symbol_index = SymbolIndex()
+            symbol_snapshot = r1.get("symbol_snapshot") or previous_manifest.get("symbol_snapshot", [])
+            if symbol_snapshot:
+                symbol_index.load_snapshot(symbol_snapshot)
+
+            repo_prefix = os.path.basename(os.path.abspath(repo_dir).rstrip("\\/"))
+            arch_payload = compute_architecture_metrics(
+                callgraph=callgraph,
+                symbol_index=symbol_index,
+                repo_prefix=repo_prefix,
+            )
+            dep_payload = compute_dependency_cycle_metrics(
+                resolved_calls=resolved_calls,
+                repo_prefix=repo_prefix,
+            )
+
+            with open(architecture_metrics_path, "w", encoding="utf-8") as f:
+                json.dump(arch_payload, f, indent=2)
+            with open(dependency_cycles_path, "w", encoding="utf-8") as f:
+                json.dump(dep_payload, f, indent=2)
     except Exception as e:
         print_json({"ok": False, "error": "ANALYZE_FAILED", "message": str(e)})
         return 1
@@ -423,6 +475,8 @@ def api_analyze(args) -> int:
         "resolved_calls_path": r1.get("resolved_calls_path", resolved_calls_path),
         "explain_path": r2.get("explain_path", explain_path),
         "analysis_metrics_path": analysis_metrics_path,
+        "architecture_metrics_path": architecture_metrics_path,
+        "dependency_cycles_path": dependency_cycles_path,
         "llm_cache_path": llm_cache_path,
         "project_tree_path": project_tree_path,
         "critical_apis": len(metrics.get("critical_apis", [])),
@@ -506,5 +560,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
 
