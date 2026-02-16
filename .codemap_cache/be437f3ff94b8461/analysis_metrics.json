@@ -1,0 +1,42 @@
+{
+  "fan_in_threshold": 2,
+  "fan_out_threshold": 3,
+  "critical_apis": [
+    {
+      "fqn": "builtins.enumerate",
+      "fan_in": 2
+    }
+  ],
+  "orchestrators": [
+    {
+      "fqn": "portfolio.developer-portfolios.src.alphabetical.main",
+      "fan_out": 5
+    },
+    {
+      "fqn": "portfolio.developer-portfolios.src.alphabetical.sort_lists_alphabetically",
+      "fan_out": 3
+    }
+  ],
+  "fan_in": {
+    "builtins.enumerate": 2,
+    "builtins.len": 1,
+    "builtins.compile": 1,
+    "builtins.sorted": 1,
+    "builtins.open": 1,
+    "portfolio.developer-portfolios.src.alphabetical.convert_to_title_case": 1,
+    "builtins.set": 1,
+    "builtins.print": 1,
+    "portfolio.developer-portfolios.src.alphabetical.sort_lists_alphabetically": 1
+  },
+  "fan_out": {
+    "portfolio.developer-portfolios.src.alphabetical.convert_to_title_case": 0,
+    "portfolio.developer-portfolios.src.alphabetical.find_duplicate_lines": 2,
+    "portfolio.developer-portfolios.src.alphabetical.sort_lists_alphabetically": 3,
+    "portfolio.developer-portfolios.src.alphabetical.main": 5
+  },
+  "stats": {
+    "total_calls": 46,
+    "symbols_with_fan_in": 9,
+    "symbols_with_fan_out": 4
+  }
+}

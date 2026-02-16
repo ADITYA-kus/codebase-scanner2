@@ -1,0 +1,12 @@
+{
+  "name": "demo_repo",
+  "type": "directory",
+  "path": "",
+  "children": [
+    {
+      "name": "hyperparameter_log.py",
+      "type": "file",
+      "path": "hyperparameter_log.py"
+    }
+  ]
+}

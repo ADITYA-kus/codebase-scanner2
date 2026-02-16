@@ -32,6 +32,37 @@ body {
   gap: 10px;
 }
 
+.workspace-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.repo-select {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 6px 10px;
+  color: var(--text);
+  min-width: 180px;
+}
+
+.repo-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #334155;
+}
+
+.repo-btn:hover,
+.repo-select:hover {
+  border-color: #b8c3d1;
+}
+
 .title {
   font-weight: 600;
   font-size: 14px;
@@ -134,6 +165,22 @@ body {
 .search-wrap {
   position: relative;
   margin-bottom: 12px;
+}
+
+.recent-wrap {
+  margin-bottom: 14px;
+  border-top: 1px solid #e8edf3;
+  padding-top: 8px;
+}
+
+#recent-symbols-wrap,
+#recent-files-wrap {
+  margin-bottom: 10px;
+}
+
+#recent-symbols .symbol-link,
+#recent-files .symbol-link {
+  margin-bottom: 4px;
 }
 
 #symbol-search-input {

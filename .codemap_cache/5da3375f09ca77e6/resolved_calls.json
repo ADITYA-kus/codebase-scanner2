@@ -78,6 +78,19 @@
     "resolved_target": "builtins.print"
   },
   {
+    "caller": "<module>",
+    "class": null,
+    "object": null,
+    "callee": "Student1",
+    "line": 27,
+    "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+    "call_type": "local",
+    "target": "Student1",
+    "caller_fqn": "testing_repo.test.<module>",
+    "callee_fqn": "testing_repo.test.Student1",
+    "resolved_target": "testing_repo.test.Student1"
+  },
+  {
     "caller": "introduction",
     "class": null,
     "object": null,

@@ -13,6 +13,10 @@
   ],
   "orchestrators": [
     {
+      "fqn": "testing_repo.test.<module>",
+      "fan_out": 1
+    },
+    {
       "fqn": "testing_repo.test.Student.display",
       "fan_out": 1
     },
@@ -53,6 +57,7 @@
     "builtins.print": 4,
     "testing_repo.test.Student1.info1": 1,
     "testing_repo.test.display": 1,
+    "testing_repo.test.Student1": 1,
     "testing_repo.test.Student.display": 1,
     "builtins.str": 2
   },
@@ -61,6 +66,7 @@
     "testing_repo.test.Student1.__init__": 1,
     "testing_repo.test.Student1.info1": 1,
     "testing_repo.test.Student1.display1": 1,
+    "testing_repo.test.<module>": 1,
     "testing_repo.test.introduction": 1,
     "testing_repo.test.Student.info": 1,
     "testing_repo.test.Student.display": 1,
@@ -68,8 +74,8 @@
     "testing_repo.test.r6": 1
   },
   "stats": {
-    "total_calls": 11,
-    "symbols_with_fan_in": 5,
-    "symbols_with_fan_out": 9
+    "total_calls": 12,
+    "symbols_with_fan_in": 6,
+    "symbols_with_fan_out": 10
   }
 }

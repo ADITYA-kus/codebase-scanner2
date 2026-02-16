@@ -9,6 +9,7 @@ def print_json(obj) -> None:
     sys.stdout.write("\n")
 
 MISSING_ANALYSIS_MESSAGE = "Run: python cli.py api analyze --path <repo>"
+ANALYSIS_VERSION = "2.2"
 
 
 
@@ -356,15 +357,20 @@ def api_analyze(args) -> int:
     previous_fingerprints = previous_manifest.get("fingerprints", {})
     current_fingerprints = collect_fingerprints(repo_dir)
     delta = diff_fingerprints(previous_fingerprints, current_fingerprints)
+    version_mismatch = previous_manifest.get("analysis_version") != ANALYSIS_VERSION
 
-    rebuild_required = should_rebuild(repo_dir)
+    rebuild_required = should_rebuild(repo_dir, analysis_version=ANALYSIS_VERSION)
     r1 = {}
     r2 = {}
     metrics = {}
 
     try:
         if rebuild_required:
-            r1 = run_phase4(repo_dir=repo_dir, output_dir=cache_dir)
+            r1 = run_phase4(
+                repo_dir=repo_dir,
+                output_dir=cache_dir,
+                force_rebuild=version_mismatch,
+            )
             r2 = run_explain(repo_dir=repo_dir, output_dir=cache_dir)
             resolved_calls_path = r1.get("resolved_calls_path", resolved_calls_path)
             metrics = write_hub_metrics_from_resolved_calls(
@@ -377,6 +383,7 @@ def api_analyze(args) -> int:
                     repo_dir,
                     current_fingerprints,
                     metadata={
+                        "analysis_version": ANALYSIS_VERSION,
                         "symbol_snapshot": r1.get("symbol_snapshot", []),
                         "imports_snapshot": r1.get("imports_snapshot", {}),
                         "file_module_map": r1.get("file_module_map", {}),
@@ -407,9 +414,11 @@ def api_analyze(args) -> int:
         "ok": True,
         "cached": not rebuild_required,
         "changed_files": delta["changed_files"],
-        "incremental": r1.get("incremental", False),
+        "incremental": False if version_mismatch else r1.get("incremental", False),
         "reindexed_files": r1.get("reindexed_files", 0),
         "impacted_files": r1.get("impacted_files", 0),
+        "analysis_version": ANALYSIS_VERSION,
+        "version_mismatch_rebuild": bool(version_mismatch and rebuild_required),
         "cache_dir": cache_dir,
         "resolved_calls_path": r1.get("resolved_calls_path", resolved_calls_path),
         "explain_path": r2.get("explain_path", explain_path),

@@ -94,9 +94,11 @@ def save_manifest(path: str, manifest: Dict[str, Any]) -> str:
     return manifest_path
 
 
-def should_rebuild(path: str) -> bool:
+def should_rebuild(path: str, analysis_version: Optional[str] = None) -> bool:
     manifest = load_manifest(path)
     if not manifest:
+        return True
+    if analysis_version is not None and manifest.get("analysis_version") != analysis_version:
         return True
 
     old_fingerprints = manifest.get("fingerprints", {})

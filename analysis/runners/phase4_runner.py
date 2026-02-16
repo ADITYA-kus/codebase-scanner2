@@ -63,7 +63,11 @@ def _rel_to_abs(repo_dir: str, rel_path: str) -> str:
     return os.path.abspath(os.path.join(repo_dir, rel_path.replace("/", os.sep)))
 
 
-def run(repo_dir: Optional[str] = None, output_dir: Optional[str] = None) -> Dict[str, Any]:
+def run(
+    repo_dir: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    force_rebuild: bool = False,
+) -> Dict[str, Any]:
     """
     Phase-4 pipeline callable from CLI/VS Code.
     """
@@ -101,7 +105,7 @@ def run(repo_dir: Optional[str] = None, output_dir: Optional[str] = None) -> Dic
 
     previous_symbol_snapshot = previous_manifest.get("symbol_snapshot", [])
     previous_import_snapshot = previous_manifest.get("imports_snapshot", {})
-    full_rebuild = (not previous_manifest) or (not previous_symbol_snapshot)
+    full_rebuild = force_rebuild or (not previous_manifest) or (not previous_symbol_snapshot)
 
     if not full_rebuild:
         symbol_index.load_snapshot(previous_symbol_snapshot)

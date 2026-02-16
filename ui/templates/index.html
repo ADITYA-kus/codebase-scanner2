@@ -12,6 +12,10 @@
       <div class="title">CodeMap AI</div>
       <div id="repo-name" class="repo-name"></div>
     </div>
+    <div class="workspace-controls">
+      <select id="repo-select" class="repo-select"></select>
+      <button id="add-repo-btn" class="repo-btn" type="button">+ Add repo…</button>
+    </div>
     <div id="meta" class="meta">Loading...</div>
   </header>
 
@@ -28,6 +32,16 @@
         <input id="symbol-search-input" type="text" autocomplete="off"
           placeholder="Search symbols (e.g., Student.display, intro, parse...)" />
         <div id="symbol-search-results" class="search-results hidden"></div>
+      </div>
+      <div class="recent-wrap">
+        <div id="recent-symbols-wrap">
+          <div class="section-title">Recent Symbols</div>
+          <div id="recent-symbols" class="content muted"></div>
+        </div>
+        <div id="recent-files-wrap">
+          <div class="section-title">Recent Files</div>
+          <div id="recent-files" class="content muted"></div>
+        </div>
       </div>
       <div id="file-view" class="content muted">Select a file from the tree.</div>
     </section>

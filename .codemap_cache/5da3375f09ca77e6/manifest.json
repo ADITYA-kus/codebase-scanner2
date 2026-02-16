@@ -1,7 +1,7 @@
 {
   "repo_path": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo",
   "repo_hash": "5da3375f09ca77e6",
-  "updated_at": "2026-02-14T09:49:29.089872+00:00",
+  "updated_at": "2026-02-16T12:24:50.694710+00:00",
   "fingerprints": {
     "__init__.py": {
       "mtime_ns": 1770727983362619200,
@@ -14,8 +14,11 @@
   },
   "paths": {
     "resolved_calls_path": "D:\\pythonFiles\\code_assist_phase2\\.codemap_cache\\5da3375f09ca77e6\\resolved_calls.json",
-    "explain_path": "D:\\pythonFiles\\code_assist_phase2\\.codemap_cache\\5da3375f09ca77e6\\explain.json"
+    "explain_path": "D:\\pythonFiles\\code_assist_phase2\\.codemap_cache\\5da3375f09ca77e6\\explain.json",
+    "analysis_metrics_path": "D:\\pythonFiles\\code_assist_phase2\\.codemap_cache\\5da3375f09ca77e6\\analysis_metrics.json",
+    "llm_cache_path": "D:\\pythonFiles\\code_assist_phase2\\.codemap_cache\\5da3375f09ca77e6\\llm_cache.json"
   },
+  "analysis_version": "2.2",
   "symbol_snapshot": [
     {
       "name": "introduction1",
@@ -280,5 +283,9 @@
   },
   "file_module_map": {
     "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py": "testing_repo.test"
+  },
+  "metrics_summary": {
+    "critical_apis": 2,
+    "orchestrators": 10
   }
 }

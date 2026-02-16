@@ -1,15 +1,18 @@
 (function () {
-  const params = new URLSearchParams(window.location.search);
-  const repo = params.get("repo") || window.CODEMAP_DEFAULT_REPO || "";
-
   const metaEl = document.getElementById("meta");
   const repoNameEl = document.getElementById("repo-name");
+  const repoSelectEl = document.getElementById("repo-select");
+  const addRepoBtnEl = document.getElementById("add-repo-btn");
   const treeStatusEl = document.getElementById("tree-status");
   const treeEl = document.getElementById("tree");
   const fileViewEl = document.getElementById("file-view");
   const symbolViewEl = document.getElementById("symbol-view");
   const searchInputEl = document.getElementById("symbol-search-input");
   const searchResultsEl = document.getElementById("symbol-search-results");
+  const recentSymbolsEl = document.getElementById("recent-symbols");
+  const recentFilesEl = document.getElementById("recent-files");
+  const recentSymbolsWrapEl = document.getElementById("recent-symbols-wrap");
+  const recentFilesWrapEl = document.getElementById("recent-files-wrap");
 
   const fileCache = new Map();
   const symbolCache = new Map();
@@ -19,15 +22,18 @@
   let activeFilePath = "";
   let searchTimer = null;
   let currentSearchResults = [];
+  let workspaceRepos = [];
+  let activeRepoHash = "";
+  let recentSymbols = [];
+  let recentFiles = [];
+  let lastSymbol = "";
 
   function withRepo(path) {
-    const u = new URL(path, window.location.origin);
-    if (repo) u.searchParams.set("repo", repo);
-    return u.toString();
+    return new URL(path, window.location.origin).toString();
   }
 
-  async function fetchJson(path) {
-    const res = await fetch(withRepo(path));
+  async function fetchJson(path, options) {
+    const res = await fetch(withRepo(path), options);
     const data = await res.json();
     if (!res.ok || data.ok === false) throw data;
     return data;
@@ -74,6 +80,139 @@
     return { className, symbol, display };
   }
 
+  function clearWorkspaceView(message) {
+    fileCache.clear();
+    symbolCache.clear();
+    activeFilePath = "";
+    activeSymbolFqn = "";
+    closeSearchDropdown();
+    treeEl.innerHTML = "";
+    treeStatusEl.textContent = "";
+    fileViewEl.classList.add("muted");
+    symbolViewEl.classList.add("muted");
+    fileViewEl.textContent = message || "Select a file from the tree.";
+    symbolViewEl.textContent = "Select a symbol to view summary and usages.";
+    recentSymbols = [];
+    recentFiles = [];
+    lastSymbol = "";
+    renderRecents();
+  }
+
+  function renderRecentSymbols() {
+    if (!recentSymbolsEl || !recentSymbolsWrapEl) return;
+    const items = recentSymbols.slice(0, 8);
+    if (!items.length) {
+      recentSymbolsWrapEl.classList.add("hidden");
+      recentSymbolsEl.className = "content muted";
+      recentSymbolsEl.textContent = "";
+      return;
+    }
+    recentSymbolsWrapEl.classList.remove("hidden");
+    recentSymbolsEl.className = "content";
+    recentSymbolsEl.innerHTML = items
+      .map((fqn) => {
+        const p = parseSymbolParts(fqn);
+        return `<div><span class="symbol-link recent-link" data-fqn="${esc(fqn)}">${esc(p.display)}</span> <span class="path">${esc(fqn)}</span></div>`;
+      })
+      .join("");
+    recentSymbolsEl.querySelectorAll(".recent-link").forEach((el) => {
+      el.addEventListener("click", () => loadSymbol(el.getAttribute("data-fqn")));
+    });
+  }
+
+  function renderRecentFiles() {
+    if (!recentFilesEl || !recentFilesWrapEl) return;
+    const items = recentFiles.slice(0, 8);
+    if (!items.length) {
+      recentFilesWrapEl.classList.add("hidden");
+      recentFilesEl.className = "content muted";
+      recentFilesEl.textContent = "";
+      return;
+    }
+    recentFilesWrapEl.classList.remove("hidden");
+    recentFilesEl.className = "content";
+    recentFilesEl.innerHTML = items
+      .map((file) => `<div><span class="symbol-link recent-file-link" data-file="${esc(file)}">${esc(file)}</span></div>`)
+      .join("");
+    recentFilesEl.querySelectorAll(".recent-file-link").forEach((el) => {
+      el.addEventListener("click", () => loadFile(el.getAttribute("data-file")));
+    });
+  }
+
+  function renderRecents() {
+    renderRecentSymbols();
+    renderRecentFiles();
+  }
+
+  async function loadUiState() {
+    try {
+      const data = await fetchJson("/api/ui_state");
+      const state = data.state || {};
+      recentSymbols = Array.isArray(state.recent_symbols) ? state.recent_symbols : [];
+      recentFiles = Array.isArray(state.recent_files) ? state.recent_files : [];
+      lastSymbol = String(state.last_symbol || "");
+      renderRecents();
+      return true;
+    } catch (_e) {
+      recentSymbols = [];
+      recentFiles = [];
+      lastSymbol = "";
+      renderRecents();
+      return false;
+    }
+  }
+
+  async function updateUiState(payload) {
+    try {
+      await fetchJson("/api/ui_state/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload || {}),
+      });
+      await loadUiState();
+    } catch (_e) {
+      // Keep UI responsive even if persistence fails.
+    }
+  }
+
+  function renderWorkspaceSelect() {
+    if (!repoSelectEl) return;
+    repoSelectEl.innerHTML = workspaceRepos
+      .map((r) => `<option value="${esc(r.repo_hash)}" ${r.repo_hash === activeRepoHash ? "selected" : ""}>${esc(r.name)}</option>`)
+      .join("");
+  }
+
+  async function loadWorkspace() {
+    const ws = await fetchJson("/api/workspace");
+    workspaceRepos = ws.repos || [];
+    activeRepoHash = ws.active_repo_hash || "";
+    renderWorkspaceSelect();
+  }
+
+  async function selectWorkspace(repoHash) {
+    if (!repoHash) return;
+    await fetchJson("/api/workspace/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo_hash: repoHash }),
+    });
+    activeRepoHash = repoHash;
+    await refreshForActiveRepo();
+  }
+
+  async function addWorkspaceRepo() {
+    const value = window.prompt("Enter local repo path");
+    const repoPath = String(value || "").trim();
+    if (!repoPath) return;
+    await fetchJson("/api/workspace/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: repoPath }),
+    });
+    await loadWorkspace();
+    await refreshForActiveRepo();
+  }
+
   function renderTreeNode(node, parentEl) {
     const li = document.createElement("li");
     const label = document.createElement("span");
@@ -101,13 +240,21 @@
     try {
       const meta = await fetchJson("/api/meta");
       repoDir = meta.repo_dir || "";
-      repoName = String(repoDir || "").replace(/\\/g, "/").split("/").filter(Boolean).pop() || repo || "repo";
+      repoName = String(repoDir || "").replace(/\\/g, "/").split("/").filter(Boolean).pop() || "repo";
       if (repoNameEl) repoNameEl.textContent = repoName;
       const counts = meta.counts || {};
       metaEl.textContent = `${meta.repo_hash} | symbols ${counts.symbols || 0} | calls ${counts.resolved_calls || 0}`;
+      return true;
     } catch (e) {
-      if (repoNameEl) repoNameEl.textContent = repo || "repo";
-      metaEl.textContent = (e && (e.message || e.error)) || "Metadata unavailable";
+      const msg = (e && (e.message || e.error)) || "Metadata unavailable";
+      if (repoNameEl) repoNameEl.textContent = "No repo";
+      metaEl.textContent = msg;
+      recentSymbols = [];
+      recentFiles = [];
+      lastSymbol = "";
+      renderRecents();
+      clearWorkspaceView(msg);
+      return false;
     }
   }
 
@@ -120,15 +267,31 @@
       const ul = document.createElement("ul");
       treeEl.appendChild(ul);
       renderTreeNode(tree, ul);
+      highlightActiveFile();
+      return true;
     } catch (e) {
       treeEl.innerHTML = "";
       treeStatusEl.textContent = (e && (e.error || e.message)) || "Failed to load tree";
+      return false;
     }
   }
 
   function renderSymbolGroup(symbols) {
     const classes = (symbols && symbols.classes) || [];
     const functions = (symbols && symbols.functions) || [];
+    const moduleScope = (symbols && symbols.module_scope) || null;
+    const hasScriptOnly = moduleScope && classes.length === 0 && functions.length === 0;
+
+    const moduleHtml = moduleScope
+      ? `<div class="block">
+          <div class="section-title">Module Scope</div>
+          <div>
+            <span class="symbol-link ${moduleScope.fqn === activeSymbolFqn ? "active" : ""}" data-fqn="${esc(moduleScope.fqn)}">&lt;module&gt;</span>
+            <span class="path">(${esc(moduleScope.outgoing_calls_count)} outgoing calls)</span>
+          </div>
+          ${hasScriptOnly ? "<div class='muted'>This file is a script with module-level code. Select &lt;module&gt; to inspect calls.</div>" : ""}
+        </div>`
+      : "";
 
     const classHtml = classes.length
       ? classes.map((c) => `
@@ -150,6 +313,7 @@
       : "<div class='muted'>None</div>";
 
     return `
+      ${moduleHtml}
       <div class="section-title">Classes</div>
       ${classHtml}
       <div class="section-title">Functions</div>
@@ -325,6 +489,26 @@
     });
   }
 
+  function bindWorkspaceControls() {
+    if (repoSelectEl) {
+      repoSelectEl.addEventListener("change", async () => {
+        const selected = repoSelectEl.value;
+        if (selected && selected !== activeRepoHash) {
+          await selectWorkspace(selected);
+        }
+      });
+    }
+    if (addRepoBtnEl) {
+      addRepoBtnEl.addEventListener("click", async () => {
+        try {
+          await addWorkspaceRepo();
+        } catch (e) {
+          window.alert((e && (e.message || e.error)) || "Failed to add repo");
+        }
+      });
+    }
+  }
+
   async function loadFile(relFilePath) {
     activeFilePath = relFilePath;
     highlightActiveFile();
@@ -351,6 +535,7 @@
       bindSymbolLinks(fileViewEl);
       highlightActiveSymbol();
       highlightActiveFile();
+      await updateUiState({ opened_file: relFilePath });
     } catch (e) {
       fileViewEl.classList.add("muted");
       fileViewEl.textContent = (e && (e.error || e.message)) || "Failed to load file intelligence";
@@ -437,6 +622,7 @@
             <button class="chip" data-target="used-in-section">Used in: ${usedIn.length}</button>
           </div>
           <div class="symbol-title-main">${esc(symbolParts.display)}</div>
+          <div class="path">FQN: ${esc(result.fqn || fqn)}</div>
           <div class="path">${esc(locationText)}</div>
           <div class="divider"></div>
           <div class="section-title">Summary</div>
@@ -460,6 +646,14 @@
               <span class="path">(${esc(c.count)}×)</span>
             </div>
           `, "No calls found")}
+          <div class="divider"></div>
+          <div class="section-title">Top Callees</div>
+          ${renderConnectionBlock(calls.slice(0, 10), (c) => `
+            <div>
+              <span class="${c.clickable ? "connection-link" : "connection-muted"}" ${c.clickable ? `data-fqn="${esc(c.fqn)}"` : ""}>${esc(c.name)}</span>
+              <span class="path">(${esc(c.count)}×)</span>
+            </div>
+          `, "No callees found")}
           <div id="used-in-section" class="divider"></div>
           <div class="section-title">Used in</div>
           ${renderConnectionBlock(usedIn, (u) => `
@@ -478,13 +672,39 @@
       bindBreadcrumbs(symbolViewEl, result.fqn || fqn);
       bindConnectionChips(symbolViewEl);
       highlightActiveSymbol();
+      await updateUiState({ opened_symbol: (result.fqn || fqn), last_symbol: (result.fqn || fqn) });
     } catch (e) {
       symbolViewEl.classList.add("muted");
       symbolViewEl.textContent = (e && (e.error || e.message)) || "Failed to load symbol intelligence";
     }
   }
 
-  loadMeta();
-  loadTree();
-  bindSearchInput();
+  async function refreshForActiveRepo() {
+    clearWorkspaceView("Loading workspace...");
+    const okMeta = await loadMeta();
+    if (!okMeta) return;
+    await loadTree();
+    await loadUiState();
+    if (lastSymbol) {
+      await loadSymbol(lastSymbol);
+      return;
+    }
+    if (recentFiles.length) {
+      await loadFile(recentFiles[0]);
+    }
+  }
+
+  async function init() {
+    bindSearchInput();
+    bindWorkspaceControls();
+    try {
+      await loadWorkspace();
+      await refreshForActiveRepo();
+    } catch (e) {
+      metaEl.textContent = (e && (e.message || e.error)) || "Workspace unavailable";
+      clearWorkspaceView(metaEl.textContent);
+    }
+  }
+
+  init();
 })();

@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 
 class SymbolKind(Enum):
+    MODULE = "module"
     FUNCTION = "function"
     CLASS = "class"
     METHOD = "method"
@@ -60,6 +61,24 @@ class SymbolIndex:
         """
         Index all symbols found in a single AST tree.
         """
+        module_end = self._module_end_line(ast_tree, file_path)
+        has_defs_or_classes = any(isinstance(n, (ast.FunctionDef, ast.ClassDef)) for n in ast_tree.body)
+        imported_libs = self._module_imports(ast_tree)
+
+        module_symbol = SymbolInfo(
+            name="<module>",
+            qualified_name="<module>",
+            kind=SymbolKind.MODULE,
+            module=module,
+            file_path=file_path,
+            start_line=1,
+            end_line=module_end,
+            metadata={
+                "imports": imported_libs,
+                "has_defs_or_classes": has_defs_or_classes,
+            },
+        )
+        self.add_symbol(module_symbol)
 
         for node in ast.walk(ast_tree):
 
@@ -103,6 +122,45 @@ class SymbolIndex:
                             class_name=node.name,
                         )
                         self.add_symbol(method_symbol)
+
+    def _module_end_line(self, ast_tree: ast.AST, file_path: str) -> int:
+        end_line = 1
+        for node in ast.walk(ast_tree):
+            node_end = getattr(node, "end_lineno", None)
+            node_start = getattr(node, "lineno", None)
+            if isinstance(node_end, int):
+                end_line = max(end_line, node_end)
+            elif isinstance(node_start, int):
+                end_line = max(end_line, node_start)
+
+        if end_line <= 1:
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    end_line = max(1, len(f.readlines()))
+            except OSError:
+                end_line = 1
+        return end_line
+
+    def _module_imports(self, ast_tree: ast.AST) -> List[str]:
+        imports: List[str] = []
+        for node in ast_tree.body:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    base = (alias.name or "").split(".")[0]
+                    if base:
+                        imports.append(base)
+            elif isinstance(node, ast.ImportFrom):
+                mod = (node.module or "").split(".")[0]
+                if mod:
+                    imports.append(mod)
+        # Stable unique order
+        seen = set()
+        unique: List[str] = []
+        for item in imports:
+            if item not in seen:
+                seen.add(item)
+                unique.append(item)
+        return unique
 
     # ----------------------------
     # Lookup APIs

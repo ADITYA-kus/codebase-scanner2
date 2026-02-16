@@ -1,0 +1,72 @@
+{
+  "portfolio.developer-portfolios.src.alphabetical.convert_to_title_case": {
+    "fqn": "portfolio.developer-portfolios.src.alphabetical.convert_to_title_case",
+    "one_liner": "convert_to_title_case(readme_text) does work related to 'convert to title case'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py:5-14",
+      "Signature: Parameters: readme_text",
+      "Called by: portfolio.developer-portfolios.src.alphabetical.main",
+      "Calls: (no callees found)",
+      "Returns: a variable value. Examples: readme_text"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py",
+      "start_line": 5,
+      "end_line": 14
+    }
+  },
+  "portfolio.developer-portfolios.src.alphabetical.find_duplicate_lines": {
+    "fqn": "portfolio.developer-portfolios.src.alphabetical.find_duplicate_lines",
+    "one_liner": "Return a dict mapping a representative original line text -> list of 1-based line",
+    "details": [
+      "Defined in D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py:17-49",
+      "Signature: Parameters: lines, ignore_case, ignore_trailing_whitespace",
+      "Called by: (no callers found)",
+      "Calls: enumerate(), len()",
+      "Returns: a variable value. Examples: duplicates"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py",
+      "start_line": 17,
+      "end_line": 49
+    }
+  },
+  "portfolio.developer-portfolios.src.alphabetical.sort_lists_alphabetically": {
+    "fqn": "portfolio.developer-portfolios.src.alphabetical.sort_lists_alphabetically",
+    "one_liner": "sort_lists_alphabetically(lines) does work related to 'sort lists alphabetically'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py:52-87",
+      "Signature: Parameters: lines",
+      "Called by: portfolio.developer-portfolios.src.alphabetical.main",
+      "Calls: sorted() x3, compile() x2, enumerate()",
+      "Returns: computed value. Examples: (sorted_lines, header_indices)"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py",
+      "start_line": 52,
+      "end_line": 87
+    }
+  },
+  "portfolio.developer-portfolios.src.alphabetical.main": {
+    "fqn": "portfolio.developer-portfolios.src.alphabetical.main",
+    "one_liner": "main() does work related to 'main'.",
+    "details": [
+      "Defined in D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py:90-137",
+      "Called by: (no callers found)",
+      "Calls: open() x3, convert_to_title_case(), set(), print(), sort_lists_alphabetically()",
+      "Returns: None."
+    ],
+    "tags": [
+      "io:print",
+      "io:file"
+    ],
+    "location": {
+      "file": "D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py",
+      "start_line": 90,
+      "end_line": 137
+    }
+  }
+}

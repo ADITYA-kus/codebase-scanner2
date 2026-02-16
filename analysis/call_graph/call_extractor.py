@@ -27,13 +27,11 @@ class FunctionCallVisitor(ast.NodeVisitor):
         self.current_function = previous_function
 
     def visit_Call(self, node):
-        if self.current_function is None:
-            return
-
         func_name = self._get_call_name(node.func)
 
         obj_name = None
         call_class = self.current_class
+        caller_name = self.current_function if self.current_function is not None else "<module>"
         call_type = "local"
         target = func_name
 
@@ -57,7 +55,7 @@ class FunctionCallVisitor(ast.NodeVisitor):
 
         if func_name:
             self.calls.append({
-                "caller": self.current_function,
+                "caller": caller_name,
                 "class": call_class,
                 "object": obj_name,
                 "callee": func_name,

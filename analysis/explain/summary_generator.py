@@ -82,6 +82,19 @@ def _tags_from_callees(callee_fqns: List[str]) -> List[str]:
     return tags
 
 
+def _display_callee_name(raw: str) -> str:
+    if not raw:
+        return "<unknown>"
+    if raw.startswith("builtins."):
+        return raw.replace("builtins.", "")
+    parts = raw.split(".")
+    if len(parts) >= 2 and parts[-2][:1].isupper():
+        return f"{parts[-2]}.{parts[-1]}"
+    if len(parts) >= 2 and parts[-2] in {"mlflow", "sklearn", "numpy", "pandas"}:
+        return f"{parts[-2]}.{parts[-1]}"
+    return parts[-1]
+
+
 def _analyze_method_behavior(symbol_info: SymbolInfo, callee_fqns: List[str]) -> str:
     """Analyze what a method does based on its callees and name patterns."""
     name = symbol_info.name.lower()
@@ -134,6 +147,54 @@ def generate_symbol_summary(
     Generate a heuristic summary for one symbol.
     """
 
+    # -------- Callgraph lookup --------
+    callees_sites = callgraph.callees_of(symbol_fqn)
+    callers_sites = callgraph.callers_of(symbol_fqn)
+
+    callee_labels = [cs.callee_fqn or cs.callee_name for cs in callees_sites if (cs.callee_fqn or cs.callee_name)]
+    caller_fqns = [cs.caller_fqn for cs in callers_sites]
+    callee_counts = Counter(callee_labels)
+
+    # -------- Module summary --------
+    if symbol_info.kind.value == "module":
+        imports = symbol_info.metadata.get("imports", []) if isinstance(symbol_info.metadata, dict) else []
+        has_defs_or_classes = bool(
+            (symbol_info.metadata or {}).get("has_defs_or_classes", True)
+        ) if isinstance(symbol_info.metadata, dict) else True
+
+        if callee_counts:
+            one_liner = f"Module-level script code with {sum(callee_counts.values())} outgoing calls."
+        else:
+            one_liner = "Module-level script entrypoint with no detected outgoing calls."
+
+        details: List[str] = [
+            f"Defined in {symbol_info.file_path}:{symbol_info.start_line}-{symbol_info.end_line}"
+        ]
+        if callee_counts:
+            calls = [f"{_display_callee_name(name)} ({cnt}x)" for name, cnt in callee_counts.most_common(10)]
+            details.append("Calls: " + ", ".join(calls))
+        else:
+            details.append("Calls: (no callees found)")
+        if imports:
+            details.append("Imported libs: " + ", ".join(imports[:10]))
+        if not has_defs_or_classes:
+            details.append("Script module (no defs/classes)")
+        if caller_fqns:
+            unique_callers = sorted(set(caller_fqns))
+            details.append("Called by: " + ", ".join(unique_callers[:3]))
+
+        return {
+            "fqn": symbol_fqn,
+            "one_liner": one_liner,
+            "details": details,
+            "tags": _tags_from_callees(callee_labels),
+            "location": {
+                "file": symbol_info.file_path,
+                "start_line": symbol_info.start_line,
+                "end_line": symbol_info.end_line,
+            },
+        }
+
     # -------- Docstring lookup --------
     doc: Optional[str] = None
     if symbol_info.kind.value in ("method",):
@@ -165,14 +226,7 @@ def generate_symbol_summary(
     elif symbol_info.kind.value == "function":
         ret_info = returns.get("functions", {}).get(symbol_info.name)
 
-    # -------- Callgraph lookup --------
-    callees_sites = callgraph.callees_of(symbol_fqn)
-    callers_sites = callgraph.callers_of(symbol_fqn)
-
     callee_fqns = [cs.callee_fqn for cs in callees_sites if cs.callee_fqn]
-    caller_fqns = [cs.caller_fqn for cs in callers_sites]
-
-    callee_counts = Counter(callee_fqns)
 
     # -------- One-liner --------
     if doc_first:
@@ -245,8 +299,8 @@ def generate_symbol_summary(
     # Callee info with better formatting
     if callee_counts:
         calls_list = []
-        for name, cnt in callee_counts.most_common(8):
-            short_name = name.split(".")[-1] if "." in name else name
+        for name, cnt in callee_counts.most_common(10):
+            short_name = _display_callee_name(name)
             if cnt > 1:
                 calls_list.append(f"{short_name}() x{cnt}")
             else:

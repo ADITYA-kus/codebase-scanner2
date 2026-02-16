@@ -22,7 +22,7 @@
     "one_liner": "Student1() does work related to 'Student1'.",
     "details": [
       "Defined in D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py:6-22",
-      "Called by: (no callers found)",
+      "Called by: testing_repo.test.<module>",
       "Calls: (no callees found)",
       "Returns: unknown."
     ],

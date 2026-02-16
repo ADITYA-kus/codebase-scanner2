@@ -1,0 +1,149 @@
+{
+  "name": "portfolio",
+  "type": "directory",
+  "path": "",
+  "children": [
+    {
+      "name": "developer-portfolios",
+      "type": "directory",
+      "path": "developer-portfolios",
+      "children": [
+        {
+          "name": "assets",
+          "type": "directory",
+          "path": "developer-portfolios/assets",
+          "children": [
+            {
+              "name": "ASpittel_tweet.png",
+              "type": "file",
+              "path": "developer-portfolios/assets/ASpittel_tweet.png"
+            }
+          ]
+        },
+        {
+          "name": "src",
+          "type": "directory",
+          "path": "developer-portfolios/src",
+          "children": [
+            {
+              "name": "alphabetical.py",
+              "type": "file",
+              "path": "developer-portfolios/src/alphabetical.py"
+            }
+          ]
+        },
+        {
+          "name": "CONTRIBUTING.md",
+          "type": "file",
+          "path": "developer-portfolios/CONTRIBUTING.md"
+        },
+        {
+          "name": "README.md",
+          "type": "file",
+          "path": "developer-portfolios/README.md"
+        }
+      ]
+    },
+    {
+      "name": "src",
+      "type": "directory",
+      "path": "src",
+      "children": [
+        {
+          "name": "components",
+          "type": "directory",
+          "path": "src/components",
+          "children": [
+            {
+              "name": "Footer.jsx",
+              "type": "file",
+              "path": "src/components/Footer.jsx"
+            },
+            {
+              "name": "HeroSection.jsx",
+              "type": "file",
+              "path": "src/components/HeroSection.jsx"
+            },
+            {
+              "name": "ProjectsSection.jsx",
+              "type": "file",
+              "path": "src/components/ProjectsSection.jsx"
+            },
+            {
+              "name": "PublicationsSection.jsx",
+              "type": "file",
+              "path": "src/components/PublicationsSection.jsx"
+            },
+            {
+              "name": "SkillsSection.jsx",
+              "type": "file",
+              "path": "src/components/SkillsSection.jsx"
+            },
+            {
+              "name": "SummarySection.jsx",
+              "type": "file",
+              "path": "src/components/SummarySection.jsx"
+            }
+          ]
+        },
+        {
+          "name": "data",
+          "type": "directory",
+          "path": "src/data",
+          "children": [
+            {
+              "name": "portfolioData.js",
+              "type": "file",
+              "path": "src/data/portfolioData.js"
+            }
+          ]
+        },
+        {
+          "name": "App.jsx",
+          "type": "file",
+          "path": "src/App.jsx"
+        },
+        {
+          "name": "index.css",
+          "type": "file",
+          "path": "src/index.css"
+        },
+        {
+          "name": "main.jsx",
+          "type": "file",
+          "path": "src/main.jsx"
+        }
+      ]
+    },
+    {
+      "name": "index.html",
+      "type": "file",
+      "path": "index.html"
+    },
+    {
+      "name": "package-lock.json",
+      "type": "file",
+      "path": "package-lock.json"
+    },
+    {
+      "name": "package.json",
+      "type": "file",
+      "path": "package.json"
+    },
+    {
+      "name": "postcss.config.js",
+      "type": "file",
+      "path": "postcss.config.js"
+    },
+    {
+      "name": "tailwind.config.js",
+      "type": "file",
+      "path": "tailwind.config.js"
+    },
+    {
+      "name": "vite.config.js",
+      "type": "file",
+      "path": "vite.config.js"
+    }
+  ]
+}

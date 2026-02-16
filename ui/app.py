@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from collections import Counter
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Query, Request
@@ -16,8 +17,10 @@ from analysis.utils.cache_manager import compute_repo_hash, get_cache_dir
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 ANALYSIS_ROOT = os.path.join(PROJECT_ROOT, "analysis")
 DEFAULT_REPO = os.getenv("CODEMAP_UI_REPO", "testing_repo")
+GLOBAL_CACHE_DIR = os.path.join(PROJECT_ROOT, ".codemap_cache")
+WORKSPACES_PATH = os.path.join(GLOBAL_CACHE_DIR, "workspaces.json")
 
-MISSING_CACHE_MESSAGE = "Cache not found. Run: python cli.py api analyze --path <repo>"
+MISSING_CACHE_MESSAGE = "Not analyzed yet. Run: python cli.py api analyze --path <repo>"
 
 
 app = FastAPI(title="CodeMap AI UI")
@@ -43,19 +46,123 @@ def _resolve_repo_dir(repo_dir: Optional[str]) -> str:
     return candidate
 
 
-def _repo_ctx(repo: Optional[str]) -> Dict[str, str]:
-    repo_dir = _resolve_repo_dir(repo)
-    cache_dir = get_cache_dir(repo_dir)
+def _now_utc() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _ui_state_path(cache_dir: str) -> str:
+    return os.path.join(cache_dir, "ui_state.json")
+
+
+def _default_ui_state() -> Dict[str, Any]:
     return {
-        "repo_dir": repo_dir,
-        "repo_hash": compute_repo_hash(repo_dir),
+        "last_symbol": "",
+        "recent_symbols": [],
+        "recent_files": [],
+        "updated_at": _now_utc(),
+    }
+
+
+def _ensure_parent(path: str) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+
+def _save_json(path: str, data: Any) -> None:
+    _ensure_parent(path)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def _repo_ctx_from_dir(repo_dir: str) -> Dict[str, str]:
+    resolved = _resolve_repo_dir(repo_dir)
+    cache_dir = get_cache_dir(resolved)
+    return {
+        "repo_dir": resolved,
+        "repo_hash": compute_repo_hash(resolved),
         "cache_dir": cache_dir,
         "project_tree_path": os.path.join(cache_dir, "project_tree.json"),
         "explain_path": os.path.join(cache_dir, "explain.json"),
         "resolved_calls_path": os.path.join(cache_dir, "resolved_calls.json"),
         "manifest_path": os.path.join(cache_dir, "manifest.json"),
         "metrics_path": os.path.join(cache_dir, "analysis_metrics.json"),
+        "ui_state_path": _ui_state_path(cache_dir),
     }
+
+
+def _ensure_ui_state(ctx: Dict[str, str]) -> Dict[str, Any]:
+    state = _load_json(ctx["ui_state_path"], None)
+    if not isinstance(state, dict):
+        state = _default_ui_state()
+        _save_json(ctx["ui_state_path"], state)
+    return state
+
+
+def _load_workspaces() -> Dict[str, Any]:
+    ws = _load_json(WORKSPACES_PATH, None)
+    if isinstance(ws, dict) and isinstance(ws.get("repos"), list):
+        return ws
+    return {"active_repo_hash": "", "repos": []}
+
+
+def _save_workspaces(ws: Dict[str, Any]) -> None:
+    _save_json(WORKSPACES_PATH, ws)
+
+
+def _repo_entry(repo_dir: str) -> Dict[str, str]:
+    resolved = _resolve_repo_dir(repo_dir)
+    repo_hash = compute_repo_hash(resolved)
+    return {
+        "name": os.path.basename(resolved.rstrip("\\/")) or resolved,
+        "path": resolved,
+        "repo_hash": repo_hash,
+        "last_opened": _now_utc(),
+    }
+
+
+def _ensure_default_workspace() -> Dict[str, Any]:
+    ws = _load_workspaces()
+    if ws.get("repos"):
+        return ws
+    default_dir = _resolve_repo_dir(DEFAULT_REPO)
+    if os.path.isdir(default_dir):
+        entry = _repo_entry(default_dir)
+        ws = {"active_repo_hash": entry["repo_hash"], "repos": [entry]}
+        _save_workspaces(ws)
+    return ws
+
+
+def _get_active_repo_entry() -> Optional[Dict[str, str]]:
+    ws = _ensure_default_workspace()
+    repos = ws.get("repos", [])
+    active_hash = ws.get("active_repo_hash", "")
+    for repo in repos:
+        if repo.get("repo_hash") == active_hash:
+            return repo
+    if repos:
+        ws["active_repo_hash"] = repos[0].get("repo_hash", "")
+        _save_workspaces(ws)
+        return repos[0]
+    return None
+
+
+def _active_repo_ctx() -> Optional[Dict[str, str]]:
+    active = _get_active_repo_entry()
+    if not active:
+        return None
+    ctx = _repo_ctx_from_dir(active["path"])
+    _ensure_ui_state(ctx)
+    return ctx
+
+
+def _repo_ctx(repo: Optional[str]) -> Dict[str, str]:
+    # Backward-compatible helper retained for older internal call sites.
+    if repo:
+        return _repo_ctx_from_dir(repo)
+    active = _active_repo_ctx()
+    if active:
+        return active
+    repo_dir = _resolve_repo_dir(repo)
+    return _repo_ctx_from_dir(repo_dir)
 
 
 def _has_analysis_cache(ctx: Dict[str, str]) -> bool:
@@ -68,6 +175,17 @@ def _missing_cache_response() -> JSONResponse:
     return JSONResponse(
         status_code=400,
         content={"ok": False, "error": "CACHE_NOT_FOUND", "message": MISSING_CACHE_MESSAGE},
+    )
+
+
+def _no_active_repo_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={
+            "ok": False,
+            "error": "NO_ACTIVE_REPO",
+            "message": "No repository selected. Add one in workspace first.",
+        },
     )
 
 
@@ -190,14 +308,136 @@ def _build_search_index(ctx: Dict[str, str]) -> List[Dict[str, Any]]:
     return items
 
 
+def _normalize_ui_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(state, dict):
+        return _default_ui_state()
+    norm = _default_ui_state()
+    norm["last_symbol"] = str(state.get("last_symbol", "") or "")
+    norm["recent_symbols"] = [x for x in state.get("recent_symbols", []) if isinstance(x, str)][:20]
+    norm["recent_files"] = [x for x in state.get("recent_files", []) if isinstance(x, str)][:20]
+    norm["updated_at"] = str(state.get("updated_at", _now_utc()))
+    return norm
+
+
+def _push_recent(items: List[str], value: str, limit: int = 20) -> List[str]:
+    clean = [x for x in items if isinstance(x, str) and x != value]
+    clean.insert(0, value)
+    return clean[:limit]
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "default_repo": DEFAULT_REPO})
 
 
+@app.get("/api/workspace")
+def api_workspace():
+    ws = _ensure_default_workspace()
+    return {
+        "ok": True,
+        "repos": ws.get("repos", []),
+        "active_repo_hash": ws.get("active_repo_hash", ""),
+    }
+
+
+@app.post("/api/workspace/add")
+async def api_workspace_add(request: Request):
+    body = await request.json()
+    repo_path = str((body or {}).get("path", "")).strip()
+    if not repo_path:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_PATH"})
+    resolved = _resolve_repo_dir(repo_path)
+    if not os.path.isdir(resolved):
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_PATH"})
+
+    ws = _load_workspaces()
+    entry = _repo_entry(resolved)
+    repos = ws.get("repos", [])
+    existing = next((r for r in repos if r.get("repo_hash") == entry["repo_hash"]), None)
+    if existing:
+        existing["path"] = resolved
+        existing["name"] = entry["name"]
+        existing["last_opened"] = _now_utc()
+    else:
+        repos.append(entry)
+
+    ws["repos"] = repos
+    ws["active_repo_hash"] = entry["repo_hash"]
+    _save_workspaces(ws)
+
+    ctx = _repo_ctx_from_dir(resolved)
+    _ensure_ui_state(ctx)
+    SEARCH_INDEX_CACHE.pop(ctx["repo_hash"], None)
+
+    return {"ok": True, "repo_hash": entry["repo_hash"], "path": resolved, "name": entry["name"]}
+
+
+@app.post("/api/workspace/select")
+async def api_workspace_select(request: Request):
+    body = await request.json()
+    repo_hash = str((body or {}).get("repo_hash", "")).strip()
+    if not repo_hash:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_REPO_HASH"})
+    ws = _load_workspaces()
+    repos = ws.get("repos", [])
+    target = next((r for r in repos if r.get("repo_hash") == repo_hash), None)
+    if not target:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "REPO_NOT_FOUND"})
+
+    ws["active_repo_hash"] = repo_hash
+    target["last_opened"] = _now_utc()
+    _save_workspaces(ws)
+
+    ctx = _repo_ctx_from_dir(target["path"])
+    _ensure_ui_state(ctx)
+    return {"ok": True}
+
+
+@app.get("/api/ui_state")
+def api_ui_state():
+    ctx = _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
+
+    state = _normalize_ui_state(_ensure_ui_state(ctx))
+    if state != _load_json(ctx["ui_state_path"], {}):
+        _save_json(ctx["ui_state_path"], state)
+    return {"ok": True, "state": state}
+
+
+@app.post("/api/ui_state/update")
+async def api_ui_state_update(request: Request):
+    ctx = _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
+
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    state = _normalize_ui_state(_ensure_ui_state(ctx))
+
+    opened_symbol = str(payload.get("opened_symbol", "") or "").strip()
+    opened_file = str(payload.get("opened_file", "") or "").strip()
+    last_symbol = str(payload.get("last_symbol", "") or "").strip()
+
+    if opened_symbol:
+        state["recent_symbols"] = _push_recent(state.get("recent_symbols", []), opened_symbol, limit=20)
+        state["last_symbol"] = opened_symbol
+    elif last_symbol:
+        state["last_symbol"] = last_symbol
+
+    if opened_file:
+        state["recent_files"] = _push_recent(state.get("recent_files", []), opened_file, limit=20)
+
+    state["updated_at"] = _now_utc()
+    _save_json(ctx["ui_state_path"], state)
+    return {"ok": True}
+
+
 @app.get("/api/meta")
 def api_meta(repo: Optional[str] = Query(default=None)):
-    ctx = _repo_ctx(repo)
+    ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
     if not _has_analysis_cache(ctx):
         return _missing_cache_response()
 
@@ -205,6 +445,7 @@ def api_meta(repo: Optional[str] = Query(default=None)):
     explain = _load_json(ctx["explain_path"], {})
     resolved = _load_json(ctx["resolved_calls_path"], [])
     metrics = _load_json(ctx["metrics_path"], {})
+    ui_state = _normalize_ui_state(_ensure_ui_state(ctx))
 
     return {
         "ok": True,
@@ -218,12 +459,15 @@ def api_meta(repo: Optional[str] = Query(default=None)):
             "critical_apis": len(metrics.get("critical_apis", [])),
             "orchestrators": len(metrics.get("orchestrators", [])),
         },
+        "recent_symbols": ui_state.get("recent_symbols", [])[:10],
     }
 
 
 @app.get("/api/tree")
 def api_tree(repo: Optional[str] = Query(default=None)):
-    ctx = _repo_ctx(repo)
+    ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
     if not _has_analysis_cache(ctx):
         return _missing_cache_response()
 
@@ -241,7 +485,9 @@ def api_tree(repo: Optional[str] = Query(default=None)):
 
 @app.get("/api/file")
 def api_file(path: str = Query(...), repo: Optional[str] = Query(default=None)):
-    ctx = _repo_ctx(repo)
+    ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
     if not _has_analysis_cache(ctx):
         return _missing_cache_response()
 
@@ -269,6 +515,7 @@ def api_file(path: str = Query(...), repo: Optional[str] = Query(default=None)):
     }
     classes: Dict[str, List[str]] = {}
     functions: List[str] = []
+    module_scope_fqn: Optional[str] = None
     symbol_fqns: List[str] = []
     for s in snapshot:
         file_path = s.get("file_path")
@@ -286,6 +533,9 @@ def api_file(path: str = Query(...), repo: Optional[str] = Query(default=None)):
             if dedupe_key in method_dedupe:
                 continue
             functions.append(fqn)
+            symbol_fqns.append(fqn)
+        elif kind == "module":
+            module_scope_fqn = fqn
             symbol_fqns.append(fqn)
         elif kind == "class":
             class_name = s.get("name", "")
@@ -318,6 +568,11 @@ def api_file(path: str = Query(...), repo: Optional[str] = Query(default=None)):
         for k, v in top_callers_counter.most_common(10)
     ]
     top_callees = [{"fqn": k, "count": v} for k, v in top_callees_counter.most_common(10)]
+    module_scope_outgoing_calls_count = 0
+    if module_scope_fqn:
+        module_scope_outgoing_calls_count = len(
+            [c for c in resolved if c.get("caller_fqn") == module_scope_fqn]
+        )
 
     grouped_classes = [
         {
@@ -333,6 +588,10 @@ def api_file(path: str = Query(...), repo: Optional[str] = Query(default=None)):
         "symbols": {
             "classes": grouped_classes,
             "functions": sorted(functions),
+            "module_scope": {
+                "fqn": module_scope_fqn,
+                "outgoing_calls_count": module_scope_outgoing_calls_count,
+            } if module_scope_fqn else None,
         },
         "symbol_fqns": sorted(symbol_fqns),
         "incoming_usages_count": len(incoming),
@@ -344,7 +603,9 @@ def api_file(path: str = Query(...), repo: Optional[str] = Query(default=None)):
 
 @app.get("/api/symbol")
 def api_symbol(fqn: str = Query(...), repo: Optional[str] = Query(default=None)):
-    ctx = _repo_ctx(repo)
+    ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
     if not _has_analysis_cache(ctx):
         return _missing_cache_response()
 
@@ -360,7 +621,9 @@ def api_symbol(fqn: str = Query(...), repo: Optional[str] = Query(default=None))
 
 @app.get("/api/usages")
 def api_usages(fqn: str = Query(...), repo: Optional[str] = Query(default=None)):
-    ctx = _repo_ctx(repo)
+    ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
     if not _has_analysis_cache(ctx):
         return _missing_cache_response()
 
@@ -385,7 +648,9 @@ def api_search(
     limit: int = Query(default=20, ge=1, le=50),
     repo: Optional[str] = Query(default=None),
 ):
-    ctx = _repo_ctx(repo)
+    ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
     if not _has_analysis_cache(ctx):
         return _missing_cache_response()
 
