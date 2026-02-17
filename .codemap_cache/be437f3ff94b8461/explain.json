@@ -1,4 +1,19 @@
 {
+  "portfolio.developer-portfolios.src.alphabetical.<module>": {
+    "fqn": "portfolio.developer-portfolios.src.alphabetical.<module>",
+    "one_liner": "Module-level script code with 1 outgoing calls.",
+    "details": [
+      "Defined in D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py:1-141",
+      "Calls: main (1x)",
+      "Imported libs: re, collections"
+    ],
+    "tags": [],
+    "location": {
+      "file": "D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py",
+      "start_line": 1,
+      "end_line": 141
+    }
+  },
   "portfolio.developer-portfolios.src.alphabetical.convert_to_title_case": {
     "fqn": "portfolio.developer-portfolios.src.alphabetical.convert_to_title_case",
     "one_liner": "convert_to_title_case(readme_text) does work related to 'convert to title case'.",
@@ -6,7 +21,7 @@
       "Defined in D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py:5-14",
       "Signature: Parameters: readme_text",
       "Called by: portfolio.developer-portfolios.src.alphabetical.main",
-      "Calls: (no callees found)",
+      "Calls: findall(), title(), replace()",
       "Returns: a variable value. Examples: readme_text"
     ],
     "tags": [],
@@ -23,7 +38,7 @@
       "Defined in D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py:17-49",
       "Signature: Parameters: lines, ignore_case, ignore_trailing_whitespace",
       "Called by: (no callers found)",
-      "Calls: enumerate(), len()",
+      "Calls: defaultdict(), enumerate(), strip(), rstrip(), lower(), append(), items(), len()",
       "Returns: a variable value. Examples: duplicates"
     ],
     "tags": [],
@@ -40,7 +55,7 @@
       "Defined in D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py:52-87",
       "Signature: Parameters: lines",
       "Called by: portfolio.developer-portfolios.src.alphabetical.main",
-      "Calls: sorted() x3, compile() x2, enumerate()",
+      "Calls: append() x4, extend() x3, sorted() x3, startswith() x3, compile() x2, enumerate(), sub(), match(), group()",
       "Returns: computed value. Examples: (sorted_lines, header_indices)"
     ],
     "tags": [],
@@ -55,8 +70,8 @@
     "one_liner": "main() does work related to 'main'.",
     "details": [
       "Defined in D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py:90-137",
-      "Called by: (no callers found)",
-      "Calls: open() x3, convert_to_title_case(), set(), print(), sort_lists_alphabetically()",
+      "Called by: portfolio.developer-portfolios.src.alphabetical.<module>",
+      "Calls: open() x3, append() x3, writelines() x2, readlines(), convert_to_title_case(), set(), strip(), rstrip(), add(), print()",
       "Returns: None."
     ],
     "tags": [

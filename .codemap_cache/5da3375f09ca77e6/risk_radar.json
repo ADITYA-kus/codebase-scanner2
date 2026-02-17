@@ -1,0 +1,79 @@
+{
+  "ok": true,
+  "repo_prefix": "testing_repo",
+  "generated_at": "2026-02-17T01:59:56.857048+00:00",
+  "thresholds": {
+    "fan_in_hot": 10,
+    "fan_out_hot": 10,
+    "file_edges_hot": 20,
+    "top_k": 25
+  },
+  "repo_health": {
+    "hotspot_symbols": 1,
+    "risky_files": 1,
+    "dead_symbols": 16,
+    "dependency_cycles": 0,
+    "unresolved_ratio": 0.0
+  },
+  "hotspots": [
+    {
+      "fqn": "testing_repo.test.<module>",
+      "risk": "low",
+      "score": 10,
+      "reasons": [
+        "Module-level script orchestration"
+      ],
+      "fan_in": 0,
+      "fan_out": 1,
+      "location": {
+        "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+        "start_line": 1,
+        "end_line": 79
+      },
+      "flags": [
+        "module_level"
+      ]
+    }
+  ],
+  "risky_files": [
+    {
+      "file": "D:\\pythonFiles\\code_assist_phase2\\analysis\\testing_repo\\test.py",
+      "risk": "medium",
+      "score": 40,
+      "edges": 13,
+      "incoming_symbols": 5,
+      "outgoing_symbols": 10,
+      "reasons": [
+        "High outgoing symbol count",
+        "High incoming symbol count"
+      ]
+    }
+  ],
+  "refactor_targets": [
+    {
+      "title": "Break down top orchestrator",
+      "why": "High fan-out symbols coordinate many calls and are harder to maintain.",
+      "targets": [
+        "testing_repo.test.Student.display",
+        "testing_repo.test.<module>",
+        "testing_repo.test.Student.info"
+      ]
+    },
+    {
+      "title": "Stabilize critical API",
+      "why": "High fan-in symbols are dependency hubs and can cause broad regressions.",
+      "targets": [
+        "testing_repo.test.Student.display",
+        "testing_repo.test.Student.info",
+        "testing_repo.test.Student1"
+      ]
+    },
+    {
+      "title": "Reduce script-level work",
+      "why": "Module-level orchestration is harder to test and reuse than function boundaries.",
+      "targets": [
+        "testing_repo.test.<module>"
+      ]
+    }
+  ]
+}

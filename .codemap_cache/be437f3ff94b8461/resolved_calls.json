@@ -596,5 +596,18 @@
     "caller_fqn": "portfolio.developer-portfolios.src.alphabetical.main",
     "callee_fqn": null,
     "resolved_target": null
+  },
+  {
+    "caller": "<module>",
+    "class": null,
+    "object": null,
+    "callee": "main",
+    "line": 141,
+    "file": "D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py",
+    "call_type": "local",
+    "target": "main",
+    "caller_fqn": "portfolio.developer-portfolios.src.alphabetical.<module>",
+    "callee_fqn": "portfolio.developer-portfolios.src.alphabetical.main",
+    "resolved_target": "portfolio.developer-portfolios.src.alphabetical.main"
   }
 ]

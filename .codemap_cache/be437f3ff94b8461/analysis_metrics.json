@@ -26,17 +26,19 @@
     "portfolio.developer-portfolios.src.alphabetical.convert_to_title_case": 1,
     "builtins.set": 1,
     "builtins.print": 1,
-    "portfolio.developer-portfolios.src.alphabetical.sort_lists_alphabetically": 1
+    "portfolio.developer-portfolios.src.alphabetical.sort_lists_alphabetically": 1,
+    "portfolio.developer-portfolios.src.alphabetical.main": 1
   },
   "fan_out": {
     "portfolio.developer-portfolios.src.alphabetical.convert_to_title_case": 0,
     "portfolio.developer-portfolios.src.alphabetical.find_duplicate_lines": 2,
     "portfolio.developer-portfolios.src.alphabetical.sort_lists_alphabetically": 3,
-    "portfolio.developer-portfolios.src.alphabetical.main": 5
+    "portfolio.developer-portfolios.src.alphabetical.main": 5,
+    "portfolio.developer-portfolios.src.alphabetical.<module>": 1
   },
   "stats": {
-    "total_calls": 46,
-    "symbols_with_fan_in": 9,
-    "symbols_with_fan_out": 4
+    "total_calls": 47,
+    "symbols_with_fan_in": 10,
+    "symbols_with_fan_out": 5
   }
 }

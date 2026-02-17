@@ -51,6 +51,8 @@ class Student:
     def display(self):
         """Prints student details."""
         print("...")
+        self.info()
+
 
 
 def demo(a: int, b=10, *, c="x", **kw) -> str:

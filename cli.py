@@ -383,6 +383,88 @@ def api_repo_summary(args) -> int:
     return 0
 
 
+def api_risk_radar(args) -> int:
+    from analysis.architecture.risk_radar import compute_risk_radar
+    from analysis.utils.cache_manager import compute_repo_hash
+
+    paths = resolve_repo_paths(args.repo)
+    repo_dir = paths["repo_dir"]
+    cache_dir = paths["cache_dir"]
+
+    architecture_metrics_path = os.path.join(cache_dir, "architecture_metrics.json")
+    dependency_cycles_path = os.path.join(cache_dir, "dependency_cycles.json")
+    analysis_metrics_path = os.path.join(cache_dir, "analysis_metrics.json")
+    if (
+        not os.path.exists(architecture_metrics_path)
+        or not os.path.exists(dependency_cycles_path)
+        or not os.path.exists(analysis_metrics_path)
+    ):
+        print_json({
+            "ok": False,
+            "cached": False,
+            "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+            "repo_hash": compute_repo_hash(repo_dir),
+            "error": "Run analyze first",
+        })
+        return 1
+
+    try:
+        radar = compute_risk_radar(cache_dir=cache_dir, top_k=25)
+    except Exception as e:
+        print_json({"ok": False, "cached": False, "error": str(e)})
+        return 1
+
+    risk_radar_path = os.path.join(cache_dir, "risk_radar.json")
+    with open(risk_radar_path, "w", encoding="utf-8") as f:
+        json.dump(radar, f, indent=2)
+
+    health = radar.get("repo_health", {})
+    print_json({
+        "ok": True,
+        "cached": False,
+        "risk_radar_path": risk_radar_path,
+        "summary": {
+            "hotspot_symbols": int(health.get("hotspot_symbols", 0)),
+            "risky_files": int(health.get("risky_files", 0)),
+            "dead_symbols": int(health.get("dead_symbols", 0)),
+            "dependency_cycles": int(health.get("dependency_cycles", 0)),
+            "unresolved_ratio": float(health.get("unresolved_ratio", 0.0)),
+        },
+    })
+    return 0
+
+
+def api_impact(args) -> int:
+    from analysis.graph.impact_analyzer import compute_impact
+
+    paths = resolve_repo_paths(args.repo)
+    cache_dir = paths["cache_dir"]
+
+    resolved_calls_path = os.path.join(cache_dir, "resolved_calls.json")
+    architecture_metrics_path = os.path.join(cache_dir, "architecture_metrics.json")
+    if not os.path.exists(resolved_calls_path) or not os.path.exists(architecture_metrics_path):
+        print_json({
+            "ok": False,
+            "error": "MISSING_ANALYSIS",
+            "message": MISSING_ANALYSIS_MESSAGE,
+        })
+        return 1
+
+    try:
+        payload = compute_impact(
+            cache_dir=cache_dir,
+            target=args.target,
+            depth=args.depth,
+            max_nodes=args.max_nodes,
+        )
+    except Exception as e:
+        print_json({"ok": False, "error": "IMPACT_FAILED", "message": str(e)})
+        return 1
+
+    print_json(payload)
+    return 0
+
+
 def api_analyze(args) -> int:
     from analysis.runners.phase4_runner import run as run_phase4
     from analysis.explain.explain_runner import run as run_explain
@@ -390,6 +472,7 @@ def api_analyze(args) -> int:
     from analysis.indexing.symbol_index import SymbolIndex
     from analysis.architecture.architecture_engine import compute_architecture_metrics
     from analysis.architecture.dependency_cycles import compute_dependency_cycle_metrics
+    from analysis.architecture.risk_radar import compute_risk_radar
     from analysis.utils.cache_manager import (
         build_manifest,
         collect_fingerprints,
@@ -409,6 +492,7 @@ def api_analyze(args) -> int:
     analysis_metrics_path = os.path.join(cache_dir, "analysis_metrics.json")
     architecture_metrics_path = os.path.join(cache_dir, "architecture_metrics.json")
     dependency_cycles_path = os.path.join(cache_dir, "dependency_cycles.json")
+    risk_radar_path = os.path.join(cache_dir, "risk_radar.json")
     llm_cache_path = os.path.join(cache_dir, "llm_cache.json")
     project_tree_path = os.path.join(cache_dir, "project_tree.json")
 
@@ -419,10 +503,9 @@ def api_analyze(args) -> int:
     version_mismatch = previous_manifest.get("analysis_version") != ANALYSIS_VERSION
 
     rebuild_required = should_rebuild(repo_dir, analysis_version=ANALYSIS_VERSION)
-    derived_missing = (
-        not os.path.exists(architecture_metrics_path)
-        or not os.path.exists(dependency_cycles_path)
-    )
+    architecture_missing = not os.path.exists(architecture_metrics_path)
+    dependency_missing = not os.path.exists(dependency_cycles_path)
+    risk_missing = not os.path.exists(risk_radar_path)
     r1 = {}
     r2 = {}
     metrics = {}
@@ -472,8 +555,8 @@ def api_analyze(args) -> int:
 
         # Derived architecture outputs:
         # - regenerate on rebuild
-        # - or on cached runs when derived files are missing
-        if rebuild_required or derived_missing:
+        # - regenerate if architecture/dependency artifacts are missing
+        if rebuild_required or architecture_missing or dependency_missing:
             with open(resolved_calls_path, "r", encoding="utf-8") as f:
                 resolved_calls = json.load(f)
 
@@ -512,6 +595,15 @@ def api_analyze(args) -> int:
                 json.dump(arch_payload, f, indent=2)
             with open(dependency_cycles_path, "w", encoding="utf-8") as f:
                 json.dump(dep_payload, f, indent=2)
+
+        # Risk radar derived output:
+        # - regenerate on rebuild
+        # - regenerate when missing (cached analyze run)
+        # - regenerate when architecture/dependency were regenerated
+        if rebuild_required or risk_missing or architecture_missing or dependency_missing:
+            risk_payload = compute_risk_radar(cache_dir=cache_dir, top_k=25)
+            with open(risk_radar_path, "w", encoding="utf-8") as f:
+                json.dump(risk_payload, f, indent=2)
     except Exception as e:
         print_json({"ok": False, "error": "ANALYZE_FAILED", "message": str(e)})
         return 1
@@ -531,6 +623,7 @@ def api_analyze(args) -> int:
         "analysis_metrics_path": analysis_metrics_path,
         "architecture_metrics_path": architecture_metrics_path,
         "dependency_cycles_path": dependency_cycles_path,
+        "risk_radar_path": risk_radar_path,
         "llm_cache_path": llm_cache_path,
         "project_tree_path": project_tree_path,
         "critical_apis": len(metrics.get("critical_apis", [])),
@@ -603,6 +696,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_api_repo_summary = api_sub.add_parser("repo_summary", help="LLM repo-level architectural summary")
     p_api_repo_summary.add_argument("--repo", required=True, help="Repository directory to summarize")
     p_api_repo_summary.set_defaults(func=api_repo_summary)
+
+    p_api_risk_radar = api_sub.add_parser("risk_radar", help="Repo-level risk radar from cached architecture artifacts")
+    p_api_risk_radar.add_argument("--repo", required=True, help="Repository directory")
+    p_api_risk_radar.set_defaults(func=api_risk_radar)
+
+    p_api_impact = api_sub.add_parser("impact", help="Change impact preview for symbol or file target")
+    p_api_impact.add_argument("target", help="Symbol FQN or repo-relative file path")
+    p_api_impact.add_argument("--repo", required=True, help="Repository directory")
+    p_api_impact.add_argument("--depth", type=int, default=2, help="Traversal depth")
+    p_api_impact.add_argument("--max_nodes", type=int, default=200, help="Node cap per direction")
+    p_api_impact.set_defaults(func=api_impact)
 
     p_api_analyze = api_sub.add_parser("analyze", help="Run Phase-4 and explain generation")
     p_api_analyze.add_argument("--path", default=".", help="Repository directory to analyze")

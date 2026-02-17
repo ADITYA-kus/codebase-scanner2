@@ -13,44 +13,8 @@
   ],
   "orchestrators": [
     {
-      "fqn": "testing_repo.test.<module>",
-      "fan_out": 1
-    },
-    {
       "fqn": "testing_repo.test.Student.display",
-      "fan_out": 1
-    },
-    {
-      "fqn": "testing_repo.test.Student.info",
-      "fan_out": 1
-    },
-    {
-      "fqn": "testing_repo.test.Student1.__init__",
-      "fan_out": 1
-    },
-    {
-      "fqn": "testing_repo.test.Student1.display1",
-      "fan_out": 1
-    },
-    {
-      "fqn": "testing_repo.test.Student1.info1",
-      "fan_out": 1
-    },
-    {
-      "fqn": "testing_repo.test.demo",
-      "fan_out": 1
-    },
-    {
-      "fqn": "testing_repo.test.introduction",
-      "fan_out": 1
-    },
-    {
-      "fqn": "testing_repo.test.introduction1",
-      "fan_out": 1
-    },
-    {
-      "fqn": "testing_repo.test.r6",
-      "fan_out": 1
+      "fan_out": 2
     }
   ],
   "fan_in": {
@@ -59,6 +23,7 @@
     "testing_repo.test.display": 1,
     "testing_repo.test.Student1": 1,
     "testing_repo.test.Student.display": 1,
+    "testing_repo.test.Student.info": 1,
     "builtins.str": 2
   },
   "fan_out": {
@@ -69,13 +34,13 @@
     "testing_repo.test.<module>": 1,
     "testing_repo.test.introduction": 1,
     "testing_repo.test.Student.info": 1,
-    "testing_repo.test.Student.display": 1,
+    "testing_repo.test.Student.display": 2,
     "testing_repo.test.demo": 1,
     "testing_repo.test.r6": 1
   },
   "stats": {
-    "total_calls": 12,
-    "symbols_with_fan_in": 6,
+    "total_calls": 13,
+    "symbols_with_fan_in": 7,
     "symbols_with_fan_out": 10
   }
 }

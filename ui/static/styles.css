@@ -437,6 +437,137 @@ body {
   margin-right: 6px;
 }
 
+.risk-pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 8px;
+  border: 1px solid transparent;
+}
+
+.risk-pill.high {
+  background: #fff1f1;
+  color: #a12828;
+  border-color: #f2c6c6;
+}
+
+.risk-pill.medium {
+  background: #fff8ea;
+  color: #8a5f14;
+  border-color: #eddab4;
+}
+
+.risk-pill.low {
+  background: #eff8ef;
+  color: #2d6d3a;
+  border-color: #cbe6d2;
+}
+
+.risk-hotspot-row {
+  display: block;
+}
+
+.risk-file-row {
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  padding: 7px 9px;
+  margin-bottom: 6px;
+  background: #fff;
+}
+
+.risk-target {
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: #fff;
+}
+
+.impact-card .section-title {
+  margin-top: 10px;
+}
+
+.impact-node-row {
+  display: block;
+}
+
+.impact-distance {
+  display: inline-block;
+  min-width: 28px;
+  text-align: center;
+  border: 1px solid #d4dcea;
+  border-radius: 999px;
+  background: #f5f8ff;
+  color: #224777;
+  font-size: 11px;
+  padding: 1px 6px;
+  margin-right: 8px;
+}
+
+.impact-file-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  padding: 6px 9px;
+  margin-bottom: 6px;
+  background: #fff;
+}
+
+.impact-truncated {
+  margin-top: 8px;
+  padding: 8px 10px;
+}
+
+.impact-empty-state {
+  color: var(--text);
+}
+
+.impact-empty-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.impact-command {
+  margin: 10px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid #e7d9c8;
+  border-radius: 8px;
+  background: #fff;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.impact-truncated-banner {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #f2d7bf;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #7a4b12;
+  font-size: 12px;
+}
+
+.impact-section-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid #f0c9a8;
+  background: #fff3e6;
+  color: #8a4e14;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  vertical-align: middle;
+}
+
 .cycle-row {
   display: flex;
   justify-content: space-between;

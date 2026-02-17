@@ -586,6 +586,34 @@ def api_repo_summary(repo: Optional[str] = Query(default=None)):
     }
 
 
+@app.get("/api/risk_radar")
+def api_risk_radar(repo: Optional[str] = Query(default=None)):
+    ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
+    if not _has_analysis_cache(ctx):
+        return _missing_cache_response()
+
+    path = os.path.join(ctx["cache_dir"], "risk_radar.json")
+    if not os.path.exists(path):
+        return JSONResponse(
+            status_code=404,
+            content={
+                "ok": False,
+                "error": "MISSING_RISK_RADAR",
+                "message": "Risk radar not generated yet.",
+            },
+        )
+
+    data = _load_json(path, {})
+    mtime = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc).isoformat()
+    return {
+        "ok": True,
+        "risk_radar": data,
+        "updated_at": mtime,
+    }
+
+
 @app.get("/api/tree")
 def api_tree(repo: Optional[str] = Query(default=None)):
     ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
@@ -922,3 +950,44 @@ def api_graph(
         "nodes": nodes,
         "edges": edges_payload,
     }
+
+
+@app.get("/api/impact")
+def api_impact(
+    target: str = Query(...),
+    depth: int = Query(default=2, ge=1, le=4),
+    max_nodes: int = Query(default=200, ge=1, le=500),
+    repo: Optional[str] = Query(default=None),
+):
+    from analysis.graph.impact_analyzer import compute_impact
+
+    ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
+    if not ctx:
+        return _no_active_repo_response()
+    if not _has_analysis_cache(ctx):
+        return _missing_cache_response()
+
+    architecture_metrics_path = os.path.join(ctx["cache_dir"], "architecture_metrics.json")
+    if not os.path.exists(architecture_metrics_path):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "error": "MISSING_ANALYSIS",
+                "message": MISSING_CACHE_MESSAGE,
+            },
+        )
+
+    try:
+        payload = compute_impact(
+            cache_dir=ctx["cache_dir"],
+            target=target,
+            depth=depth,
+            max_nodes=max_nodes,
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": "IMPACT_FAILED", "message": str(e)},
+        )
+    return payload

@@ -1,0 +1,98 @@
+{
+  "ok": true,
+  "repo_prefix": "portfolio",
+  "generated_at": "2026-02-17T04:07:32.270344+00:00",
+  "thresholds": {
+    "fan_in_hot": 10,
+    "fan_out_hot": 11,
+    "file_edges_hot": 47,
+    "top_k": 25
+  },
+  "repo_health": {
+    "hotspot_symbols": 2,
+    "risky_files": 1,
+    "dead_symbols": 1,
+    "dependency_cycles": 0,
+    "unresolved_ratio": 0.0
+  },
+  "hotspots": [
+    {
+      "fqn": "portfolio.developer-portfolios.src.alphabetical.main",
+      "risk": "medium",
+      "score": 55,
+      "reasons": [
+        "High fan-out: orchestrates many calls"
+      ],
+      "fan_in": 1,
+      "fan_out": 11,
+      "location": {
+        "file": "D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py",
+        "start_line": 90,
+        "end_line": 137
+      },
+      "flags": [
+        "orchestrator"
+      ]
+    },
+    {
+      "fqn": "portfolio.developer-portfolios.src.alphabetical.<module>",
+      "risk": "low",
+      "score": 10,
+      "reasons": [
+        "Module-level script orchestration"
+      ],
+      "fan_in": 0,
+      "fan_out": 1,
+      "location": {
+        "file": "D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py",
+        "start_line": 1,
+        "end_line": 141
+      },
+      "flags": [
+        "module_level"
+      ]
+    }
+  ],
+  "risky_files": [
+    {
+      "file": "D:\\pythonFiles\\portfolio\\developer-portfolios\\src\\alphabetical.py",
+      "risk": "high",
+      "score": 100,
+      "edges": 47,
+      "incoming_symbols": 3,
+      "outgoing_symbols": 5,
+      "reasons": [
+        "High edge density in file-level call graph",
+        "High outgoing symbol count",
+        "High incoming symbol count"
+      ]
+    }
+  ],
+  "refactor_targets": [
+    {
+      "title": "Break down top orchestrator",
+      "why": "High fan-out symbols coordinate many calls and are harder to maintain.",
+      "targets": [
+        "portfolio.developer-portfolios.src.alphabetical.main",
+        "portfolio.developer-portfolios.src.alphabetical.sort_lists_alphabetically",
+        "portfolio.developer-portfolios.src.alphabetical.find_duplicate_lines"
+      ]
+    },
+    {
+      "title": "Stabilize critical API",
+      "why": "High fan-in symbols are dependency hubs and can cause broad regressions.",
+      "targets": [
+        "portfolio.developer-portfolios.src.alphabetical.convert_to_title_case",
+        "portfolio.developer-portfolios.src.alphabetical.main",
+        "portfolio.developer-portfolios.src.alphabetical.sort_lists_alphabetically"
+      ]
+    },
+    {
+      "title": "Reduce script-level work",
+      "why": "Module-level orchestration is harder to test and reuse than function boundaries.",
+      "targets": [
+        "portfolio.developer-portfolios.src.alphabetical.<module>"
+      ]
+    }
+  ]
+}

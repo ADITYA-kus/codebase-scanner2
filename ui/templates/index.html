@@ -50,6 +50,7 @@
       <h2>Symbol Intelligence</h2>
       <div class="view-toggle">
         <button id="tab-details" class="tab-btn active" type="button">Details</button>
+        <button id="tab-impact" class="tab-btn" type="button">Impact</button>
         <button id="tab-graph" class="tab-btn" type="button">Graph</button>
         <button id="tab-architecture" class="tab-btn" type="button">Architecture</button>
       </div>
@@ -71,7 +72,26 @@
         <label><input id="graph-hide-external" type="checkbox" checked /> Hide external</label>
         <input id="graph-search" type="text" placeholder="Search graph nodes..." />
       </div>
+      <div id="impact-controls" class="graph-controls hidden">
+        <label>Depth
+          <select id="impact-depth">
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+        <label>Max nodes
+          <select id="impact-max-nodes">
+            <option value="200" selected>200</option>
+            <option value="100">100</option>
+            <option value="50">50</option>
+            <option value="10">10</option>
+            <option value="1">1 (test truncation)</option>
+          </select>
+        </label>
+      </div>
       <div id="symbol-view" class="content muted">Select a symbol to view summary and usages.</div>
+      <div id="impact-view" class="content muted hidden">Select a symbol to view impact.</div>
       <div id="graph-view" class="content muted hidden">Select a symbol to view graph.</div>
       <div id="architecture-view" class="content muted hidden">Select a repository to view architecture insights.</div>
     </section>

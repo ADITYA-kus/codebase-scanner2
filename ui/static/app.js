@@ -10,9 +10,14 @@
   const searchInputEl = document.getElementById("symbol-search-input");
   const searchResultsEl = document.getElementById("symbol-search-results");
   const tabDetailsEl = document.getElementById("tab-details");
+  const tabImpactEl = document.getElementById("tab-impact");
   const tabGraphEl = document.getElementById("tab-graph");
   const tabArchitectureEl = document.getElementById("tab-architecture");
   const graphControlsEl = document.getElementById("graph-controls");
+  const impactControlsEl = document.getElementById("impact-controls");
+  const impactDepthEl = document.getElementById("impact-depth");
+  const impactMaxNodesEl = document.getElementById("impact-max-nodes");
+  const impactViewEl = document.getElementById("impact-view");
   const graphViewEl = document.getElementById("graph-view");
   const architectureViewEl = document.getElementById("architecture-view");
   const graphModeEl = document.getElementById("graph-mode");
@@ -40,11 +45,16 @@
   let lastSymbol = "";
   let activeTab = "details";
   let graphDataCache = new Map();
+  let impactDataCache = new Map();
   let architectureCache = null;
   let repoSummary = null;
   let repoSummaryUpdatedAt = "";
   let repoSummaryStatus = "idle"; // idle|loading|ready|missing|error
   let repoSummaryError = "";
+  let riskRadar = null;
+  let riskRadarUpdatedAt = "";
+  let riskRadarStatus = "idle"; // idle|loading|ready|missing|error
+  let riskRadarError = "";
 
   function withRepo(path) {
     return new URL(path, window.location.origin).toString();
@@ -108,10 +118,12 @@
     treeStatusEl.textContent = "";
     fileViewEl.classList.add("muted");
     symbolViewEl.classList.add("muted");
+    impactViewEl.classList.add("muted");
     graphViewEl.classList.add("muted");
     architectureViewEl.classList.add("muted");
     fileViewEl.textContent = message || "Select a file from the tree.";
     symbolViewEl.textContent = "Select a symbol to view summary and usages.";
+    impactViewEl.textContent = "Select a symbol to view impact.";
     graphViewEl.textContent = "Select a symbol to view graph.";
     architectureViewEl.textContent = "Select a repository to view architecture insights.";
     recentSymbols = [];
@@ -122,6 +134,10 @@
     repoSummaryUpdatedAt = "";
     repoSummaryStatus = "idle";
     repoSummaryError = "";
+    riskRadar = null;
+    riskRadarUpdatedAt = "";
+    riskRadarStatus = "idle";
+    riskRadarError = "";
     renderRecents();
   }
 
@@ -136,18 +152,25 @@
   }
 
   function setActiveTab(tab) {
-    activeTab = tab === "graph" || tab === "architecture" ? tab : "details";
+    activeTab = tab === "graph" || tab === "architecture" || tab === "impact" ? tab : "details";
+    const isImpact = activeTab === "impact";
     const isGraph = activeTab === "graph";
     const isArchitecture = activeTab === "architecture";
     if (tabDetailsEl) tabDetailsEl.classList.toggle("active", activeTab === "details");
+    if (tabImpactEl) tabImpactEl.classList.toggle("active", isImpact);
     if (tabGraphEl) tabGraphEl.classList.toggle("active", isGraph);
     if (tabArchitectureEl) tabArchitectureEl.classList.toggle("active", isArchitecture);
     if (symbolViewEl) symbolViewEl.classList.toggle("hidden", activeTab !== "details");
+    if (impactViewEl) impactViewEl.classList.toggle("hidden", !isImpact);
     if (graphViewEl) graphViewEl.classList.toggle("hidden", !isGraph);
     if (architectureViewEl) architectureViewEl.classList.toggle("hidden", !isArchitecture);
     if (graphControlsEl) graphControlsEl.classList.toggle("hidden", !isGraph);
+    if (impactControlsEl) impactControlsEl.classList.toggle("hidden", !isImpact);
     if (isGraph) {
       loadGraph();
+    }
+    if (isImpact) {
+      loadImpact();
     }
     if (isArchitecture) {
       loadArchitecture();
@@ -231,6 +254,103 @@
     }
   }
 
+  function riskPillClass(risk) {
+    const v = String(risk || "").toLowerCase();
+    if (v === "high") return "risk-pill high";
+    if (v === "medium") return "risk-pill medium";
+    return "risk-pill low";
+  }
+
+  function riskRadarSection() {
+    const cmd = `python cli.py api risk_radar --repo ${repoName || "<repo>"}`;
+    if (riskRadarStatus === "loading") {
+      return `<div class="card"><div class="section-title">Risk Radar</div><div class="path">Loading risk radar...</div></div>`;
+    }
+    if (riskRadarStatus === "missing") {
+      return `<div class="card arch-missing"><div class="section-title">Risk Radar</div><div>Risk radar not generated yet.</div><div class="path">${esc(cmd)}</div></div>`;
+    }
+    if (riskRadarStatus === "error") {
+      return `<div class="card arch-missing"><div class="section-title">Risk Radar</div><div>${esc(riskRadarError || "Failed to load risk radar.")}</div><div class="path">Run analyze, then: ${esc(cmd)}</div></div>`;
+    }
+    if (riskRadarStatus !== "ready" || !riskRadar) {
+      return `<div class="card"><div class="section-title">Risk Radar</div><div class="path">No risk data loaded.</div></div>`;
+    }
+
+    const payload = riskRadar || {};
+    const hotspots = Array.isArray(payload.hotspots) ? payload.hotspots.slice(0, 5) : [];
+    const riskyFiles = Array.isArray(payload.risky_files) ? payload.risky_files.slice(0, 5) : [];
+    const refactors = Array.isArray(payload.refactor_targets) ? payload.refactor_targets.slice(0, 6) : [];
+
+    const hotspotsHtml = hotspots.length
+      ? hotspots.map((h) => `
+        <button class="arch-row risk-hotspot-row" data-fqn="${esc(h.fqn)}">
+          <span class="arch-name">${esc(shortLabel(h.fqn))}</span>
+          <span class="${riskPillClass(h.risk)}">${esc(h.risk)}</span>
+          <span class="path">score:${esc(h.score)} in:${esc(h.fan_in)} out:${esc(h.fan_out)}</span>
+          ${Array.isArray(h.reasons) && h.reasons.length ? `<span class="path">${esc(h.reasons[0])}</span>` : ""}
+        </button>
+      `).join("")
+      : "<div class='muted'>No hotspots detected.</div>";
+
+    const filesHtml = riskyFiles.length
+      ? riskyFiles.map((f) => `
+        <div class="risk-file-row">
+          <span class="arch-name">${esc(basename(f.file || ""))}</span>
+          <span class="${riskPillClass(f.risk)}">${esc(f.risk)}</span>
+          <span class="path">score:${esc(f.score)} edges:${esc(f.edges)}</span>
+        </div>
+      `).join("")
+      : "<div class='muted'>No risky files detected.</div>";
+
+    const refactorHtml = refactors.length
+      ? refactors.map((r) => `
+        <div class="risk-target">
+          <div class="arch-name">${esc(r.title || "")}</div>
+          <div class="path">${esc(r.why || "")}</div>
+          ${(Array.isArray(r.targets) && r.targets.length) ? `<div class="path">targets: ${esc(r.targets.join(", "))}</div>` : ""}
+        </div>
+      `).join("")
+      : "<div class='muted'>No refactor targets suggested.</div>";
+
+    return `
+      <div class="card">
+        <div class="section-title">Risk Radar</div>
+        <div class="path">updated: ${esc(riskRadarUpdatedAt || "unknown")}</div>
+        <div class="divider"></div>
+        <div class="section-title">Top Hotspots</div>
+        ${hotspotsHtml}
+        <div class="divider"></div>
+        <div class="section-title">Top Risky Files</div>
+        ${filesHtml}
+        <div class="divider"></div>
+        <div class="section-title">Refactor Targets</div>
+        ${refactorHtml}
+      </div>
+    `;
+  }
+
+  async function loadRiskRadar(force) {
+    if (!force && riskRadarStatus === "ready" && riskRadar) return;
+    riskRadarStatus = "loading";
+    riskRadarError = "";
+    try {
+      const data = await fetchJson("/api/risk_radar");
+      riskRadar = data.risk_radar || null;
+      riskRadarUpdatedAt = data.updated_at || "";
+      riskRadarStatus = "ready";
+    } catch (e) {
+      riskRadar = null;
+      riskRadarUpdatedAt = "";
+      if (e && e.error === "MISSING_RISK_RADAR") {
+        riskRadarStatus = "missing";
+        riskRadarError = "";
+      } else {
+        riskRadarStatus = "error";
+        riskRadarError = (e && (e.message || e.error)) || "Risk radar load failed";
+      }
+    }
+  }
+
   async function loadArchitecture() {
     if (!architectureViewEl) return;
     architectureViewEl.classList.remove("muted");
@@ -238,6 +358,7 @@
     try {
       if (!architectureCache) architectureCache = await fetchJson("/api/architecture");
       await loadRepoSummary(false);
+      await loadRiskRadar(false);
       const arch = architectureCache.architecture_metrics || {};
       const dep = architectureCache.dependency_cycles || {};
       const repo = arch.repo || {};
@@ -250,6 +371,7 @@
 
       architectureViewEl.innerHTML = `
         ${repoSummarySection()}
+        ${riskRadarSection()}
         <div class="arch-grid">
           <div class="kpi-card"><div class="kpi-label">Orchestrators</div><div class="kpi-value">${orchestrators.length}</div></div>
           <div class="kpi-card"><div class="kpi-label">Critical APIs</div><div class="kpi-value">${critical.length}</div></div>
@@ -384,6 +506,112 @@
         if (next) loadSymbol(next);
       });
     });
+  }
+
+  function renderImpactList(nodes, emptyText) {
+    if (!nodes || !nodes.length) return `<div class="muted">${esc(emptyText)}</div>`;
+    return nodes.slice(0, 200).map((n) => {
+      const isLocal = !String(n.fqn || "").startsWith("builtins.") && !String(n.fqn || "").startsWith("external::");
+      if (isLocal) {
+        return `
+          <button class="arch-row impact-node-row" data-fqn="${esc(n.fqn)}">
+            <span class="arch-name">${esc(shortLabel(n.fqn))}</span>
+            <span class="impact-distance">d${esc(n.distance)}</span>
+            <span class="path">in:${esc(n.fan_in)} out:${esc(n.fan_out)} ${esc(n.file ? relPath(n.file) : "")}:${esc(n.line)}</span>
+          </button>
+        `;
+      }
+      return `
+        <div class="risk-file-row">
+          <span class="arch-name">${esc(shortLabel(n.fqn))}</span>
+          <span class="impact-distance">d${esc(n.distance)}</span>
+          <span class="path">in:${esc(n.fan_in)} out:${esc(n.fan_out)} ${esc(n.file ? relPath(n.file) : "")}:${esc(n.line)}</span>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderImpactedFiles(items) {
+    if (!items || !items.length) return "<div class='muted'>No impacted files.</div>";
+    return items.slice(0, 15).map((x) => `
+      <div class="impact-file-row">
+        <span class="path">${esc(relPath(x.file || ""))}</span>
+        <span class="impact-distance">${esc(x.count)}</span>
+      </div>
+    `).join("");
+  }
+
+  async function loadImpact(fqn) {
+    if (!impactViewEl) return;
+    const anchor = fqn || activeSymbolFqn;
+    if (!anchor) {
+      impactViewEl.classList.add("muted");
+      impactViewEl.textContent = "Select a symbol to view impact.";
+      return;
+    }
+    const depth = Number(impactDepthEl && impactDepthEl.value ? impactDepthEl.value : 2);
+    const maxNodes = Number(impactMaxNodesEl && impactMaxNodesEl.value ? impactMaxNodesEl.value : 200);
+    const key = `${anchor}|${depth}|${maxNodes}`;
+    impactViewEl.classList.remove("muted");
+    impactViewEl.innerHTML = "<div class='card'>Loading impact...</div>";
+    try {
+      let data = impactDataCache.get(key);
+      if (!data) {
+        data = await fetchJson(`/api/impact?target=${encodeURIComponent(anchor)}&depth=${depth}&max_nodes=${maxNodes}`);
+        impactDataCache.set(key, data);
+      }
+      const up = data.upstream || { nodes: [], truncated: false };
+      const down = data.downstream || { nodes: [], truncated: false };
+      const files = data.impacted_files || { upstream: [], downstream: [] };
+      const truncated = !!(up.truncated || down.truncated);
+      const upstreamBadge = up.truncated ? " <span class='impact-section-badge'>TRUNCATED</span>" : "";
+      const downstreamBadge = down.truncated ? " <span class='impact-section-badge'>TRUNCATED</span>" : "";
+
+      impactViewEl.innerHTML = `
+        <div class="card impact-card">
+          <div class="section-title">Impact</div>
+          <div class="path">Target: ${esc(anchor)} | depth: ${esc(data.depth)} | max_nodes: ${esc(data.max_nodes)}</div>
+          ${truncated ? `<div class='impact-truncated-banner'>⚠️ Results truncated (max_nodes=${esc(data.max_nodes)}). Displaying partial results.</div>` : ""}
+          <div class="divider"></div>
+          <div class="section-title">Upstream${upstreamBadge}</div>
+          ${renderImpactList(up.nodes || [], "No upstream dependents in selected depth.")}
+          <div class="divider"></div>
+          <div class="section-title">Downstream${downstreamBadge}</div>
+          ${renderImpactList(down.nodes || [], "No downstream dependencies in selected depth.")}
+          <div class="divider"></div>
+          <div class="section-title">Impacted Files (Upstream)</div>
+          ${renderImpactedFiles(files.upstream || [])}
+          <div class="divider"></div>
+          <div class="section-title">Impacted Files (Downstream)</div>
+          ${renderImpactedFiles(files.downstream || [])}
+        </div>
+      `;
+
+      impactViewEl.querySelectorAll(".impact-node-row").forEach((el) => {
+        el.addEventListener("click", async () => {
+          const next = el.getAttribute("data-fqn");
+          if (!next) return;
+          setActiveTab("details");
+          await loadSymbol(next);
+        });
+      });
+    } catch (e) {
+      const errCode = String((e && e.error) || "");
+      if (errCode === "MISSING_ANALYSIS" || errCode === "CACHE_NOT_FOUND") {
+        impactViewEl.classList.remove("muted");
+        impactViewEl.innerHTML = `
+          <div class="card arch-missing impact-empty-state">
+            <div class="impact-empty-title">⚠️ Analysis not found</div>
+            <div>This repository hasn’t been analyzed yet. Run analysis first.</div>
+            <pre class="impact-command">python cli.py api analyze --path &lt;repo&gt;</pre>
+            <div class="path">After it finishes, refresh this page.</div>
+          </div>
+        `;
+        return;
+      }
+      impactViewEl.classList.add("muted");
+      impactViewEl.textContent = (e && (e.error || e.message)) || "Impact unavailable.";
+    }
   }
 
   async function loadGraph(fqn) {
@@ -830,6 +1058,7 @@
 
   function bindGraphControls() {
     if (tabDetailsEl) tabDetailsEl.addEventListener("click", () => setActiveTab("details"));
+    if (tabImpactEl) tabImpactEl.addEventListener("click", () => setActiveTab("impact"));
     if (tabGraphEl) tabGraphEl.addEventListener("click", () => setActiveTab("graph"));
     if (tabArchitectureEl) tabArchitectureEl.addEventListener("click", () => setActiveTab("architecture"));
     const rerender = () => {
@@ -850,12 +1079,19 @@
         if (cached) renderGraphData(cached);
       }
     });
+    const rerenderImpact = () => {
+      impactDataCache.clear();
+      if (activeTab === "impact") loadImpact();
+    };
+    if (impactDepthEl) impactDepthEl.addEventListener("change", rerenderImpact);
+    if (impactMaxNodesEl) impactMaxNodesEl.addEventListener("change", rerenderImpact);
   }
 
   async function loadFile(relFilePath) {
     activeFilePath = relFilePath;
     highlightActiveFile();
     graphDataCache.clear();
+    impactDataCache.clear();
     fileViewEl.classList.remove("muted");
     fileViewEl.textContent = "Loading file intelligence...";
     try {
@@ -921,6 +1157,7 @@
     activeSymbolFqn = fqn;
     highlightActiveSymbol();
     graphDataCache.clear();
+    impactDataCache.clear();
     showSymbolLoading();
     try {
       const symbolPromise = (async () => {
@@ -1024,6 +1261,9 @@
       if (activeTab === "graph" && graphParams().mode === "symbol") {
         await loadGraph(result.fqn || fqn);
       }
+      if (activeTab === "impact") {
+        await loadImpact(result.fqn || fqn);
+      }
     } catch (e) {
       symbolViewEl.classList.add("muted");
       symbolViewEl.textContent = (e && (e.error || e.message)) || "Failed to load symbol intelligence";
@@ -1037,6 +1277,10 @@
     repoSummaryUpdatedAt = "";
     repoSummaryStatus = "idle";
     repoSummaryError = "";
+    riskRadar = null;
+    riskRadarUpdatedAt = "";
+    riskRadarStatus = "idle";
+    riskRadarError = "";
     const okMeta = await loadMeta();
     if (!okMeta) return;
     await loadTree();
