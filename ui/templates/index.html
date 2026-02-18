@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -14,16 +14,91 @@
     </div>
     <div class="workspace-controls">
       <select id="repo-select" class="repo-select"></select>
-      <button id="add-repo-btn" class="repo-btn" type="button">+ Add repo…</button>
+      <button id="add-repo-btn" class="repo-btn" type="button">+ Add repo...</button>
     </div>
     <div id="meta" class="meta">Loading...</div>
   </header>
+  <section id="add-repo-inline" class="add-repo-inline hidden">
+    <div class="add-repo-header">
+      <div class="section-title">Add Repository</div>
+      <button id="repo-inline-close" class="repo-btn" type="button">Close</button>
+    </div>
+    <div class="modal-tabs">
+      <button id="repo-tab-local" class="tab-btn active" type="button">Local Path</button>
+      <button id="repo-tab-github" class="tab-btn" type="button">GitHub</button>
+    </div>
+    <div id="repo-form-local" class="modal-form">
+      <label>Repo path
+        <input id="local-repo-path" type="text" placeholder="D:\repo\project or ./repo" />
+      </label>
+      <label>Display name (optional)
+        <input id="local-display-name" type="text" placeholder="defaults to folder name" />
+      </label>
+    </div>
+    <div id="repo-form-github" class="modal-form hidden">
+      <label>GitHub URL
+        <input id="gh-repo-url" type="text" placeholder="https://github.com/org/repo" />
+      </label>
+      <label>Ref
+        <input id="gh-ref" type="text" value="main" />
+      </label>
+      <label>Mode
+        <select id="gh-mode">
+          <option value="zip" selected>zip</option>
+          <option value="git">git</option>
+        </select>
+      </label>
+      <label>Token (optional for private repos)
+        <input id="gh-token" type="password" placeholder="Used for this run only" />
+      </label>
+    </div>
+    <label class="path">
+      <input id="repo-open-after-add" type="checkbox" checked />
+      Open after add
+    </label>
+    <div id="repo-modal-error" class="status"></div>
+    <div class="modal-actions">
+      <button id="repo-add-btn" class="repo-btn" type="button">Add repo</button>
+      <button id="repo-cancel-btn" class="repo-btn" type="button">Cancel</button>
+    </div>
+  </section>
 
   <main class="layout shell">
     <section class="panel">
       <h2>Repository Tree</h2>
       <div id="tree-status" class="status"></div>
+      <div id="repo-list" class="card">
+        <div class="section-title">Repositories</div>
+        <div id="repo-list-content" class="content muted">Loading repositories...</div>
+      </div>
       <div id="tree" class="tree"></div>
+      <div class="divider"></div>
+      <div id="data-privacy" class="card">
+        <div class="section-title">Data &amp; Privacy</div>
+        <div id="privacy-summary" class="path">Loading data retention...</div>
+        <div id="privacy-expiring" class="content muted"></div>
+        <div class="privacy-controls">
+          <label>Cache TTL (days)
+            <input id="policy-default-ttl" type="number" min="0" />
+          </label>
+          <label>Workspace TTL (days)
+            <input id="policy-workspace-ttl" type="number" min="0" />
+          </label>
+        </div>
+        <div class="privacy-actions">
+          <button id="policy-save-btn" class="repo-btn" type="button">Save policy</button>
+          <button id="cleanup-dry-btn" class="repo-btn" type="button">Run Cleanup (Dry Run)</button>
+          <button id="cleanup-now-btn" class="repo-btn" type="button">Run Cleanup Now</button>
+          <button id="delete-repo-cache-btn" class="repo-btn danger" type="button">Delete cached data (repo)</button>
+        </div>
+        <label class="path">
+          <input id="auto-clean-on-remove" type="checkbox" />
+          Automatically delete repo data when I remove it from UI
+        </label>
+        <div class="path">Your analysis data is stored locally under .codemap_cache. You can delete it anytime.</div>
+        <div class="path">Retention cleanup runs locally; nothing is uploaded.</div>
+        <div id="privacy-result" class="content muted"></div>
+      </div>
     </section>
 
     <section class="panel">
@@ -97,9 +172,13 @@
     </section>
   </main>
 
+  <div id="toast" class="toast hidden"></div>
+
   <script>
     window.CODEMAP_DEFAULT_REPO = "{{ default_repo }}";
   </script>
   <script src="/static/app.js"></script>
 </body>
 </html>
+
+

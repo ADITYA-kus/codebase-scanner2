@@ -1,7 +1,9 @@
 import argparse
 import json
 import os
+import shutil
 import sys
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
 def print_json(obj) -> None:
@@ -16,6 +18,625 @@ ANALYSIS_VERSION = "2.2"
 def _analysis_root() -> str:
     # cli.py is at project root; analysis/ is sibling
     return os.path.join(os.path.dirname(__file__), "analysis")
+
+
+def _global_cache_root() -> str:
+    return os.path.join(os.path.dirname(__file__), ".codemap_cache")
+
+
+def _safe_delete_dir(path: str, allowed_root: str) -> bool:
+    if not path:
+        return False
+    if not os.path.exists(path):
+        return False
+    real_root = os.path.realpath(allowed_root)
+    real_target = os.path.realpath(path)
+    try:
+        common = os.path.commonpath([real_root, real_target])
+    except ValueError:
+        return False
+    if common != real_root:
+        return False
+    shutil.rmtree(real_target)
+    return True
+
+
+def _dir_size_bytes(path: str) -> int:
+    total = 0
+    if not os.path.isdir(path):
+        return 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            fp = os.path.join(root, name)
+            try:
+                total += int(os.path.getsize(fp))
+            except OSError:
+                continue
+    return int(total)
+
+
+def _cache_root() -> str:
+    root = _global_cache_root()
+    os.makedirs(root, exist_ok=True)
+    return root
+
+
+def _load_workspace_registry() -> Dict[str, Any]:
+    path = os.path.join(_cache_root(), "workspaces.json")
+    if not os.path.exists(path):
+        return {"active_repo_hash": "", "repos": []}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            data.setdefault("repos", [])
+            data.setdefault("active_repo_hash", "")
+            return data
+    except Exception:
+        pass
+    return {"active_repo_hash": "", "repos": []}
+
+
+def _parse_iso_dt(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _parse_duration_days(spec: str) -> Optional[float]:
+    raw = str(spec or "").strip().lower()
+    if not raw:
+        return None
+    try:
+        if raw.endswith("d"):
+            return float(raw[:-1])
+        if raw.endswith("h"):
+            return float(raw[:-1]) / 24.0
+        return float(raw)
+    except Exception:
+        return None
+
+
+def _touch_repo_access_by_dir(repo_dir: Optional[str]) -> None:
+    if not repo_dir:
+        return
+    try:
+        from analysis.utils.cache_manager import compute_repo_hash, touch_access
+        touch_access(compute_repo_hash(repo_dir))
+    except Exception:
+        pass
+
+
+def _save_workspace_registry(data: Dict[str, Any]) -> None:
+    path = os.path.join(_cache_root(), "workspaces.json")
+    data = dict(data or {})
+    repos = data.get("repos")
+    if not isinstance(repos, list):
+        repos = []
+    data["repos"] = repos
+    if not repos:
+        data["active_repo_hash"] = ""
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def _cache_artifact_map(cache_dir: str) -> Dict[str, bool]:
+    return {
+        "resolved_calls": os.path.exists(os.path.join(cache_dir, "resolved_calls.json")),
+        "explain": os.path.exists(os.path.join(cache_dir, "explain.json")),
+        "project_tree": os.path.exists(os.path.join(cache_dir, "project_tree.json")),
+        "risk_radar": os.path.exists(os.path.join(cache_dir, "risk_radar.json")),
+        "dependency_cycles": os.path.exists(os.path.join(cache_dir, "dependency_cycles.json")),
+    }
+
+
+def _read_manifest(cache_dir: str) -> Dict[str, Any]:
+    path = os.path.join(cache_dir, "manifest.json")
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _resolve_cache_target(args) -> Dict[str, Any]:
+    from analysis.utils.cache_manager import compute_repo_hash, get_cache_dir
+    from analysis.utils.repo_fetcher import resolve_workspace_paths
+
+    path_value = str(getattr(args, "path", "") or "").strip()
+    github_value = str(getattr(args, "github", "") or "").strip()
+    ref_value = str(getattr(args, "ref", "") or "").strip() or None
+    mode_value = str(getattr(args, "mode", "git") or "git").strip().lower() or "git"
+
+    if path_value and github_value:
+        return {"ok": False, "error": "INVALID_ARGS", "message": "Use either --path or --github, not both."}
+    if not path_value and not github_value:
+        return {"ok": False, "error": "INVALID_ARGS", "message": "Provide --path <repo> or --github <url>."}
+    if mode_value not in {"git", "zip"}:
+        return {"ok": False, "error": "INVALID_ARGS", "message": "--mode must be one of: git, zip"}
+
+    if github_value:
+        try:
+            ws = resolve_workspace_paths(github_value, ref_value, mode_value)
+        except Exception as e:
+            return {"ok": False, "error": "INVALID_GITHUB_URL", "message": str(e)}
+        repo_dir = ws["repo_dir"]
+        cache_dir = get_cache_dir(repo_dir)
+        return {
+            "ok": True,
+            "source": "github",
+            "repo_dir": repo_dir,
+            "repo_hash": compute_repo_hash(repo_dir),
+            "cache_dir": cache_dir,
+            "workspace_dir": ws["workspace_dir"],
+            "repo_url": ws["normalized_url"],
+            "ref": ref_value,
+            "mode": mode_value,
+        }
+
+    repo_dir = resolve_repo_paths(path_value)["repo_dir"]
+    cache_dir = get_cache_dir(repo_dir)
+    return {
+        "ok": True,
+        "source": "local",
+        "repo_dir": repo_dir,
+        "repo_hash": compute_repo_hash(repo_dir),
+        "cache_dir": cache_dir,
+        "workspace_dir": None,
+        "repo_url": None,
+        "ref": None,
+        "mode": None,
+    }
+
+
+def _retention_from_manifest(manifest: Dict[str, Any]) -> Dict[str, Any]:
+    data = manifest if isinstance(manifest, dict) else {}
+    retention = data.get("retention", {}) if isinstance(data.get("retention", {}), dict) else {}
+    mode = str(retention.get("mode", "ttl") or "ttl")
+    if mode not in {"ttl", "session_only", "pinned"}:
+        mode = "ttl"
+    ttl_days = int(retention.get("ttl_days", 14) or 14)
+    if ttl_days < 1:
+        ttl_days = 1
+    created_at = str(retention.get("created_at") or data.get("updated_at") or "")
+    last_accessed_at = str(retention.get("last_accessed_at") or created_at)
+    return {
+        "mode": mode,
+        "ttl_days": ttl_days,
+        "created_at": created_at,
+        "last_accessed_at": last_accessed_at,
+    }
+
+
+def api_cache_help(_args) -> int:
+    print_json({
+        "ok": True,
+        "commands": [
+            "python cli.py api cache list",
+            "python cli.py api cache policy get",
+            "python cli.py api cache policy set --default-ttl-days 30 --workspaces-ttl-days 7",
+            "python cli.py api cache info --path <repo>",
+            "python cli.py api cache info --github <url> --ref <ref> --mode <git|zip>",
+            "python cli.py api cache clear --path <repo> [--dry-run] [--yes]",
+            "python cli.py api cache clear --repo_hash <hash> [--dry-run] [--yes]",
+            "python cli.py api cache clear --github <url> --ref <ref> --mode <git|zip> [--dry-run] [--yes]",
+            "python cli.py api cache cleanup [--dry-run] [--yes|--apply]",
+            "python cli.py api cache delete --repo_hash <hash> [--dry-run] [--yes]",
+            "python cli.py api cache delete --path <repo> [--dry-run] [--yes]",
+            "python cli.py api cache delete --github <url> --ref <ref> --mode <git|zip> [--dry-run] [--yes]",
+            "python cli.py api cache prune --older-than <duration> [--dry-run] [--yes]",
+        ],
+    })
+    return 0
+
+
+def api_cache_policy_get(_args) -> int:
+    from analysis.utils.cache_manager import load_policy
+
+    print_json({"ok": True, "policy": load_policy()})
+    return 0
+
+
+def api_cache_policy_set(args) -> int:
+    from analysis.utils.cache_manager import load_policy, save_policy
+
+    current = load_policy()
+    default_ttl = getattr(args, "default_ttl_days", None)
+    ws_ttl = getattr(args, "workspaces_ttl_days", None)
+
+    if default_ttl is not None and int(default_ttl) < 0:
+        print_json({"ok": False, "error": "INVALID_ARGS", "message": "--default-ttl-days must be >= 0"})
+        return 1
+    if ws_ttl is not None and int(ws_ttl) < 0:
+        print_json({"ok": False, "error": "INVALID_ARGS", "message": "--workspaces-ttl-days must be >= 0"})
+        return 1
+
+    updated = {
+        "default_ttl_days": int(default_ttl) if default_ttl is not None else int(current.get("default_ttl_days", 30)),
+        "workspaces_ttl_days": int(ws_ttl) if ws_ttl is not None else int(current.get("workspaces_ttl_days", 7)),
+        "never_delete_repo_hashes": current.get("never_delete_repo_hashes", []),
+        "repo_policies": current.get("repo_policies", {}),
+        "last_cleanup_iso": current.get("last_cleanup_iso", ""),
+    }
+    policy = save_policy(updated)
+    print_json({"ok": True, "policy": policy})
+    return 0
+
+
+def api_cache_list(_args) -> int:
+    cache_root = _cache_root()
+    caches: List[Dict[str, Any]] = []
+    for name in sorted(os.listdir(cache_root)):
+        if name in {"workspaces", "workspaces.json"}:
+            continue
+        cache_dir = os.path.join(cache_root, name)
+        if not os.path.isdir(cache_dir):
+            continue
+        manifest = _read_manifest(cache_dir)
+        repo_path = manifest.get("repo_path") if isinstance(manifest, dict) else None
+        source = "github" if isinstance(repo_path, str) and (os.sep + ".codemap_cache" + os.sep + "workspaces" + os.sep) in repo_path else "local"
+        retention = _retention_from_manifest(manifest)
+        caches.append({
+            "repo_hash": name,
+            "cache_dir": os.path.abspath(cache_dir),
+            "source": source,
+            "repo_url": None,
+            "repo_path": repo_path if isinstance(repo_path, str) else None,
+            "ref": None,
+            "analysis_version": manifest.get("analysis_version") if isinstance(manifest, dict) else None,
+            "last_updated": manifest.get("updated_at") if isinstance(manifest, dict) else None,
+            "retention": retention,
+            "size_bytes": _dir_size_bytes(cache_dir),
+            "has": _cache_artifact_map(cache_dir),
+        })
+
+    print_json({"ok": True, "count": len(caches), "caches": caches})
+    return 0
+
+
+def api_cache_info(args) -> int:
+    target = _resolve_cache_target(args)
+    if not target.get("ok"):
+        print_json({"ok": False, "error": target.get("error"), "message": target.get("message"), "hint": "Use: python cli.py api cache help"})
+        return 1
+
+    cache_dir = target["cache_dir"]
+    if not os.path.isdir(cache_dir):
+        print_json({
+            "ok": False,
+            "error": "CACHE_NOT_FOUND",
+            "message": f"Cache directory not found: {cache_dir}",
+            "hint": "Run: python cli.py api analyze --path <repo>",
+        })
+        return 1
+
+    manifest = _read_manifest(cache_dir)
+    retention = _retention_from_manifest(manifest)
+    files = {
+        "resolved_calls_path": os.path.join(cache_dir, "resolved_calls.json") if os.path.exists(os.path.join(cache_dir, "resolved_calls.json")) else None,
+        "explain_path": os.path.join(cache_dir, "explain.json") if os.path.exists(os.path.join(cache_dir, "explain.json")) else None,
+        "project_tree_path": os.path.join(cache_dir, "project_tree.json") if os.path.exists(os.path.join(cache_dir, "project_tree.json")) else None,
+        "risk_radar_path": os.path.join(cache_dir, "risk_radar.json") if os.path.exists(os.path.join(cache_dir, "risk_radar.json")) else None,
+    }
+    notes = []
+    if files["explain_path"] is None:
+        notes.append("missing explain.json; run: python cli.py api analyze --path <repo>")
+    if files["resolved_calls_path"] is None:
+        notes.append("missing resolved_calls.json; run: python cli.py api analyze --path <repo>")
+
+    print_json({
+        "ok": True,
+        "repo_hash": target["repo_hash"],
+        "cache_dir": os.path.abspath(cache_dir),
+        "workspace_dir": target.get("workspace_dir"),
+        "source": target["source"],
+        "analysis_version": manifest.get("analysis_version") if isinstance(manifest, dict) else None,
+        "last_updated": manifest.get("updated_at") if isinstance(manifest, dict) else None,
+        "retention": retention,
+        "files": files,
+        "size_bytes": _dir_size_bytes(cache_dir),
+        "notes": notes,
+    })
+    try:
+        from analysis.utils.cache_manager import touch_access
+        touch_access(target["repo_hash"])
+    except Exception:
+        pass
+    return 0
+
+
+def api_cache_clear(args) -> int:
+    repo_hash_arg = str(getattr(args, "repo_hash", "") or "").strip()
+    if repo_hash_arg:
+        from analysis.utils.cache_manager import delete_repo as cm_delete_repo
+        dry_run = bool(getattr(args, "dry_run", False))
+        yes = bool(getattr(args, "yes", False))
+        if not dry_run and not yes:
+            confirm = input(f"This will clear analysis data for repo_hash={repo_hash_arg}. Continue? [y/N] ").strip().lower()
+            if confirm not in {"y", "yes"}:
+                print_json({"ok": False, "error": "ABORTED", "message": "Operation cancelled by user.", "hint": "Pass --yes to skip confirmation."})
+                return 1
+        result = cm_delete_repo(repo_hash=repo_hash_arg, dry_run=dry_run, remove_workspace_registry=False)
+        print_json({
+            **result,
+            "message": "Cache clear completed." if (result.get("deleted") or result.get("dry_run")) else "Nothing to delete.",
+        })
+        return 0
+
+    target = _resolve_cache_target(args)
+    if not target.get("ok"):
+        print_json({"ok": False, "error": target.get("error"), "message": target.get("message"), "hint": "Use: python cli.py api cache help"})
+        return 1
+
+    dry_run = bool(getattr(args, "dry_run", False))
+    yes = bool(getattr(args, "yes", False))
+    include_workspace = bool(getattr(args, "include_workspace", False))
+
+    cache_root = _cache_root()
+    cache_dir = target["cache_dir"]
+    workspace_dir = target.get("workspace_dir")
+
+    would_delete: List[str] = []
+    if os.path.isdir(cache_dir):
+        would_delete.append(os.path.abspath(cache_dir))
+
+    ws_registry = _load_workspace_registry()
+    repos = ws_registry.get("repos", []) if isinstance(ws_registry, dict) else []
+    linked_refs = 0
+    if workspace_dir:
+        ws_real = os.path.realpath(workspace_dir)
+        for item in repos:
+            p = str((item or {}).get("path", "") or "")
+            if p and os.path.realpath(p).startswith(ws_real):
+                linked_refs += 1
+        if os.path.isdir(workspace_dir) and (include_workspace or linked_refs <= 1):
+            would_delete.append(os.path.abspath(workspace_dir))
+
+    freed = sum(_dir_size_bytes(p) for p in would_delete if os.path.isdir(p))
+    if dry_run:
+        print_json({
+            "ok": True,
+            "repo_hash": target["repo_hash"],
+            "dry_run": True,
+            "deleted": False,
+            "cache_dir": os.path.abspath(cache_dir),
+            "workspace_dir": workspace_dir,
+            "would_delete": would_delete,
+            "freed_bytes_estimate": int(freed),
+            "message": "Dry run only; no files deleted.",
+        })
+        return 0
+
+    if not yes:
+        prompt = f"This will delete cache_dir={cache_dir}"
+        if workspace_dir and os.path.abspath(workspace_dir) in would_delete:
+            prompt += f" and workspace_dir={workspace_dir}"
+        prompt += ". Continue? [y/N] "
+        confirm = input(prompt).strip().lower()
+        if confirm not in {"y", "yes"}:
+            print_json({
+                "ok": False,
+                "error": "ABORTED",
+                "message": "Operation cancelled by user.",
+                "hint": "Pass --yes to skip confirmation.",
+            })
+            return 1
+
+    deleted_any = False
+    for path in would_delete:
+        if _safe_delete_dir(path, cache_root):
+            deleted_any = True
+
+    # cleanup workspace registry entries that reference deleted workspace
+    if workspace_dir and (os.path.abspath(workspace_dir) in would_delete):
+        ws_real = os.path.realpath(workspace_dir)
+        new_repos = []
+        for item in repos:
+            p = str((item or {}).get("path", "") or "")
+            if p and os.path.realpath(p).startswith(ws_real):
+                continue
+            new_repos.append(item)
+        ws_registry["repos"] = new_repos
+        active_hash = str(ws_registry.get("active_repo_hash", "") or "")
+        if active_hash and not any(str(r.get("repo_hash", "")) == active_hash for r in new_repos if isinstance(r, dict)):
+            ws_registry["active_repo_hash"] = ""
+        _save_workspace_registry(ws_registry)
+
+    print_json({
+        "ok": True,
+        "repo_hash": target["repo_hash"],
+        "dry_run": False,
+        "deleted": bool(deleted_any),
+        "cache_dir": os.path.abspath(cache_dir),
+        "workspace_dir": workspace_dir,
+        "would_delete": would_delete,
+        "freed_bytes_estimate": int(freed),
+        "message": "Cache clear completed." if deleted_any else "Nothing to delete.",
+    })
+    return 0
+
+
+def api_cache_delete(args) -> int:
+    repo_hash_arg = str(getattr(args, "repo_hash", "") or "").strip()
+    if repo_hash_arg:
+        from analysis.utils.cache_manager import delete_repo as cm_delete_repo
+
+        dry_run = bool(getattr(args, "dry_run", False))
+        yes = bool(getattr(args, "yes", False))
+        if not dry_run and not yes:
+            confirm = input(f"This will delete all cache artifacts for repo_hash={repo_hash_arg}. Continue? [y/N] ").strip().lower()
+            if confirm not in {"y", "yes"}:
+                print_json({"ok": False, "error": "ABORTED", "message": "Operation cancelled by user.", "hint": "Pass --yes to skip confirmation."})
+                return 1
+        result = cm_delete_repo(repo_hash=repo_hash_arg, dry_run=dry_run)
+        print_json(result)
+        return 0
+
+    target = _resolve_cache_target(args)
+    if not target.get("ok"):
+        print_json({"ok": False, "error": target.get("error"), "message": target.get("message"), "hint": "Use: python cli.py api cache help"})
+        return 1
+
+    dry_run = bool(getattr(args, "dry_run", False))
+    yes = bool(getattr(args, "yes", False))
+    cache_root = _cache_root()
+    cache_dir = target["cache_dir"]
+    workspace_dir = target.get("workspace_dir")
+
+    would_delete: List[str] = []
+    if os.path.isdir(cache_dir):
+        would_delete.append(os.path.abspath(cache_dir))
+    if workspace_dir and os.path.isdir(workspace_dir):
+        would_delete.append(os.path.abspath(workspace_dir))
+
+    freed = sum(_dir_size_bytes(p) for p in would_delete if os.path.isdir(p))
+    if dry_run:
+        print_json({
+            "ok": True,
+            "dry_run": True,
+            "repo_hash": target["repo_hash"],
+            "deleted": False,
+            "would_delete": would_delete,
+            "freed_bytes_estimate": int(freed),
+        })
+        return 0
+
+    if not yes:
+        confirm = input(f"This will delete all cache artifacts for repo_hash={target['repo_hash']}. Continue? [y/N] ").strip().lower()
+        if confirm not in {"y", "yes"}:
+            print_json({"ok": False, "error": "ABORTED", "message": "Operation cancelled by user.", "hint": "Pass --yes to skip confirmation."})
+            return 1
+
+    deleted_any = False
+    for path in would_delete:
+        if _safe_delete_dir(path, cache_root):
+            deleted_any = True
+
+    ws = _load_workspace_registry()
+    repos = ws.get("repos", []) if isinstance(ws, dict) else []
+    if workspace_dir:
+        ws_real = os.path.realpath(workspace_dir)
+        repos = [
+            r for r in repos
+            if not os.path.realpath(str((r or {}).get("path", "") or "")).startswith(ws_real)
+        ]
+        ws["repos"] = repos
+        active = str(ws.get("active_repo_hash", "") or "")
+        if active and not any(str((r or {}).get("repo_hash", "")) == active for r in repos):
+            ws["active_repo_hash"] = ""
+        _save_workspace_registry(ws)
+
+    print_json({
+        "ok": True,
+        "dry_run": False,
+        "repo_hash": target["repo_hash"],
+        "deleted": bool(deleted_any),
+        "would_delete": would_delete,
+        "freed_bytes_estimate": int(freed),
+    })
+    return 0
+
+
+def api_cache_cleanup(args) -> int:
+    from analysis.utils.cache_manager import cleanup as cm_cleanup
+
+    apply_flag = bool(getattr(args, "apply", False))
+    dry_run = bool(getattr(args, "dry_run", False)) and not apply_flag
+    yes = bool(getattr(args, "yes", False)) or apply_flag
+    if not dry_run and not yes:
+        confirm = input("This will delete expired cache/workspace data based on retention policy. Continue? [y/N] ").strip().lower()
+        if confirm not in {"y", "yes"}:
+            print_json({"ok": False, "error": "ABORTED", "message": "Operation cancelled by user.", "hint": "Pass --yes to skip confirmation."})
+            return 1
+
+    result = cm_cleanup(dry_run=dry_run)
+    print_json(result)
+    return 0
+
+
+def api_cache_prune(args) -> int:
+    dry_run = bool(getattr(args, "dry_run", False))
+    yes = bool(getattr(args, "yes", False))
+    older_than_days = _parse_duration_days(str(getattr(args, "older_than", "") or ""))
+    if older_than_days is None:
+        older_than_days = 0.0
+
+    cache_root = _cache_root()
+    now = _now_utc()
+    candidates: List[Dict[str, Any]] = []
+
+    for name in sorted(os.listdir(cache_root)):
+        if name in {"workspaces", "workspaces.json"}:
+            continue
+        cache_dir = os.path.join(cache_root, name)
+        if not os.path.isdir(cache_dir):
+            continue
+        manifest = _read_manifest(cache_dir)
+        retention = _retention_from_manifest(manifest)
+        mode = retention["mode"]
+        if mode == "pinned":
+            continue
+        last_access = _parse_iso_dt(retention.get("last_accessed_at")) or _parse_iso_dt(retention.get("created_at")) or _parse_iso_dt(manifest.get("updated_at"))
+        if last_access is None:
+            last_access = now
+        age_days = (now - last_access).total_seconds() / 86400.0
+        policy_days = 1.0 if mode == "session_only" else float(retention.get("ttl_days", 14))
+        eligible_policy = age_days > policy_days
+        eligible_older_than = age_days > older_than_days
+        if eligible_policy and eligible_older_than:
+            candidates.append({
+                "repo_hash": name,
+                "cache_dir": os.path.abspath(cache_dir),
+                "age_days": round(age_days, 3),
+                "retention_mode": mode,
+                "ttl_days": policy_days,
+                "size_bytes": _dir_size_bytes(cache_dir),
+            })
+
+    would_delete = [c["cache_dir"] for c in candidates]
+    freed = sum(int(c["size_bytes"]) for c in candidates)
+    if dry_run:
+        print_json({
+            "ok": True,
+            "dry_run": True,
+            "deleted": False,
+            "count": len(candidates),
+            "candidates": candidates,
+            "would_delete": would_delete,
+            "freed_bytes_estimate": int(freed),
+        })
+        return 0
+
+    if not yes:
+        confirm = input(f"This will prune {len(candidates)} cache directories. Continue? [y/N] ").strip().lower()
+        if confirm not in {"y", "yes"}:
+            print_json({"ok": False, "error": "ABORTED", "message": "Operation cancelled by user.", "hint": "Pass --yes to skip confirmation."})
+            return 1
+
+    deleted = []
+    for c in candidates:
+        if _safe_delete_dir(c["cache_dir"], cache_root):
+            deleted.append(c["cache_dir"])
+
+    print_json({
+        "ok": True,
+        "dry_run": False,
+        "deleted": True,
+        "count": len(deleted),
+        "would_delete": deleted,
+        "freed_bytes_estimate": int(freed),
+    })
+    return 0
 
 
 def _build_project_tree_snapshot(repo_dir: str) -> Dict[str, Any]:
@@ -171,6 +792,8 @@ def cmd_explain(args) -> int:
         print("\nTags: " + ", ".join(tags))
 
     print("=" * 80 + "\n")
+    if args.repo:
+        _touch_repo_access_by_dir(resolve_repo_paths(args.repo)["repo_dir"])
     return 0
 
 
@@ -189,6 +812,8 @@ def cmd_search(args) -> int:
     if len(matches) > limit:
         print(f"\n...and {len(matches) - limit} more. Use --limit to increase.")
     print()
+    if args.repo:
+        _touch_repo_access_by_dir(resolve_repo_paths(args.repo)["repo_dir"])
     return 0
 
 
@@ -208,6 +833,8 @@ def cmd_list(args) -> int:
     if len(keys) > limit:
         print(f"\n...and {len(keys) - limit} more. Use --limit to increase.")
     print()
+    if args.repo:
+        _touch_repo_access_by_dir(resolve_repo_paths(args.repo)["repo_dir"])
     return 0
 
 
@@ -236,6 +863,8 @@ def api_explain(args) -> int:
         "ok": True,
         "result": _symbol_payload(db[fqn], fqn)
     })
+    if args.repo:
+        _touch_repo_access_by_dir(paths["repo_dir"])
     return 0
 
 
@@ -261,6 +890,8 @@ def api_search(args) -> int:
         "results": results,
         "truncated": len(matches) > args.limit
     })
+    if args.repo:
+        _touch_repo_access_by_dir(paths["repo_dir"])
     return 0
 
 
@@ -289,6 +920,8 @@ def api_list(args) -> int:
         "results": results,
         "truncated": len(keys) > args.limit
     })
+    if args.repo:
+        _touch_repo_access_by_dir(paths["repo_dir"])
     return 0
 
 
@@ -309,6 +942,8 @@ def api_status(args) -> int:
         "path": path,
         "symbols": len(db)
     })
+    if args.repo:
+        _touch_repo_access_by_dir(resolve_repo_paths(args.repo)["repo_dir"])
     return 0
 
 
@@ -326,6 +961,7 @@ def api_llm_explain(args) -> int:
 
     result = llm_explain_symbol(fqn=args.fqn, repo_dir=paths["repo_dir"], no_cache=args.no_cache)
     print_json(result)
+    _touch_repo_access_by_dir(paths["repo_dir"])
     return 0 if result.get("ok") else 1
 
 
@@ -380,6 +1016,7 @@ def api_repo_summary(args) -> int:
         json.dump(final, f, indent=2)
 
     print_json(final)
+    _touch_repo_access_by_dir(repo_dir)
     return 0
 
 
@@ -431,6 +1068,7 @@ def api_risk_radar(args) -> int:
             "unresolved_ratio": float(health.get("unresolved_ratio", 0.0)),
         },
     })
+    _touch_repo_access_by_dir(repo_dir)
     return 0
 
 
@@ -462,6 +1100,7 @@ def api_impact(args) -> int:
         return 1
 
     print_json(payload)
+    _touch_repo_access_by_dir(paths["repo_dir"])
     return 0
 
 
@@ -473,18 +1112,148 @@ def api_analyze(args) -> int:
     from analysis.architecture.architecture_engine import compute_architecture_metrics
     from analysis.architecture.dependency_cycles import compute_dependency_cycle_metrics
     from analysis.architecture.risk_radar import compute_risk_radar
+    from analysis.utils.repo_fetcher import fetch_public_repo, fetch_public_repo_zip
     from analysis.utils.cache_manager import (
         build_manifest,
         collect_fingerprints,
+        compute_repo_hash,
         diff_fingerprints,
         get_cache_dir,
         load_manifest,
         save_manifest,
+        set_retention,
         should_rebuild,
+        touch_access,
     )
 
-    repo_dir = resolve_repo_paths(args.path)["repo_dir"]
+    path_arg = getattr(args, "path", None)
+    github_arg = getattr(args, "github", None)
+    ref_arg = getattr(args, "ref", None)
+    mode_arg = str(getattr(args, "mode", "git") or "git").strip().lower()
+    token_arg = str(getattr(args, "token", "") or "").strip()
+    retention_mode = str(getattr(args, "retention", "ttl") or "ttl").strip().lower()
+    ttl_days_arg = int(getattr(args, "ttl_days", 14) or 14)
+    refresh_flag = bool(getattr(args, "refresh", False))
+    rebuild_flag = bool(getattr(args, "rebuild", False))
+    clear_cache_flag = bool(getattr(args, "clear_cache", False))
+    force_full_rebuild = bool(rebuild_flag or refresh_flag or retention_mode == "session_only")
+    path_value = str(path_arg).strip() if path_arg is not None else ""
+    github_value = str(github_arg).strip() if github_arg is not None else ""
+
+    if path_value and github_value:
+        print_json({
+            "ok": False,
+            "error": "INVALID_ARGS",
+            "message": "Use either --path <dir> or --github <url>, not both.",
+        })
+        return 1
+    if refresh_flag and not github_value:
+        print_json({
+            "ok": False,
+            "error": "INVALID_ARGS",
+            "message": "--refresh is supported only with --github.",
+        })
+        return 1
+    if mode_arg not in {"git", "zip"}:
+        print_json({
+            "ok": False,
+            "error": "INVALID_ARGS",
+            "message": "--mode must be one of: git, zip",
+        })
+        return 1
+    if mode_arg == "zip" and not github_value:
+        print_json({
+            "ok": False,
+            "error": "INVALID_ARGS",
+            "message": "--mode zip requires --github.",
+        })
+        return 1
+    if retention_mode not in {"ttl", "session_only", "pinned"}:
+        print_json({
+            "ok": False,
+            "error": "INVALID_ARGS",
+            "message": "--retention must be one of: ttl, session_only, pinned",
+        })
+        return 1
+    if ttl_days_arg < 1:
+        print_json({
+            "ok": False,
+            "error": "INVALID_ARGS",
+            "message": "--ttl-days must be >= 1",
+        })
+        return 1
+
+    source = "filesystem"
+    mode = "filesystem"
+    auth = "none"
+    repo_url = None
+    workspace_dir = None
+    fetched = None
+    refreshed = False
+    resolved_ref = None
+    cache_cleared = False
+    downloaded = None
+    zip_url = None
+    token_value: Optional[str] = None
+
+    if github_value:
+        source = "github"
+        env_token = str(os.getenv("GITHUB_TOKEN", "") or "").strip()
+        if token_arg:
+            token_value = token_arg
+            auth = "arg"
+        elif env_token:
+            token_value = env_token
+            auth = "env"
+        else:
+            token_value = None
+            auth = "none"
+        mode = mode_arg
+        if mode_arg == "zip":
+            fetch_result = fetch_public_repo_zip(
+                github_value,
+                ref=str(ref_arg or ""),
+                refresh=refresh_flag,
+                token=token_value,
+                auth=auth,
+            )
+        else:
+            fetch_result = fetch_public_repo(
+                github_value,
+                ref=ref_arg,
+                refresh=refresh_flag,
+                token=token_value,
+                auth=auth,
+            )
+        if not fetch_result.get("ok"):
+            err_code = fetch_result.get("error_code")
+            print_json({
+                "ok": False,
+                "error": err_code or "GITHUB_FETCH_FAILED",
+                "message": fetch_result.get("error", "Failed to fetch GitHub repository"),
+                "source": source,
+                "mode": mode,
+                "auth": auth,
+                "repo_url": github_value,
+                "ref": ref_arg,
+            })
+            return 1
+        repo_dir = fetch_result["repo_dir"]
+        repo_url = fetch_result.get("normalized_url")
+        workspace_dir = fetch_result.get("workspace_dir")
+        fetched = bool(fetch_result.get("fetched"))
+        refreshed = bool(fetch_result.get("refreshed", False))
+        resolved_ref = fetch_result.get("ref")
+        downloaded = fetch_result.get("downloaded")
+        zip_url = fetch_result.get("zip_url")
+    else:
+        mode = "filesystem"
+        repo_dir_input = path_value or "."
+        repo_dir = resolve_repo_paths(repo_dir_input)["repo_dir"]
+
     cache_dir = get_cache_dir(repo_dir)
+    if clear_cache_flag:
+        cache_cleared = _safe_delete_dir(cache_dir, _global_cache_root())
     os.makedirs(cache_dir, exist_ok=True)
 
     resolved_calls_path = os.path.join(cache_dir, "resolved_calls.json")
@@ -502,7 +1271,7 @@ def api_analyze(args) -> int:
     delta = diff_fingerprints(previous_fingerprints, current_fingerprints)
     version_mismatch = previous_manifest.get("analysis_version") != ANALYSIS_VERSION
 
-    rebuild_required = should_rebuild(repo_dir, analysis_version=ANALYSIS_VERSION)
+    rebuild_required = bool(force_full_rebuild or should_rebuild(repo_dir, analysis_version=ANALYSIS_VERSION))
     architecture_missing = not os.path.exists(architecture_metrics_path)
     dependency_missing = not os.path.exists(dependency_cycles_path)
     risk_missing = not os.path.exists(risk_radar_path)
@@ -515,7 +1284,7 @@ def api_analyze(args) -> int:
             r1 = run_phase4(
                 repo_dir=repo_dir,
                 output_dir=cache_dir,
-                force_rebuild=version_mismatch,
+                force_rebuild=bool(version_mismatch or force_full_rebuild),
             )
             r2 = run_explain(repo_dir=repo_dir, output_dir=cache_dir)
             resolved_calls_path = r1.get("resolved_calls_path", resolved_calls_path)
@@ -530,6 +1299,12 @@ def api_analyze(args) -> int:
                     current_fingerprints,
                     metadata={
                         "analysis_version": ANALYSIS_VERSION,
+                        "retention": {
+                            "mode": retention_mode,
+                            "ttl_days": int(1 if retention_mode == "session_only" else ttl_days_arg),
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                            "last_accessed_at": datetime.now(timezone.utc).isoformat(),
+                        },
                         "symbol_snapshot": r1.get("symbol_snapshot", []),
                         "imports_snapshot": r1.get("imports_snapshot", {}),
                         "file_module_map": r1.get("file_module_map", {}),
@@ -604,13 +1379,26 @@ def api_analyze(args) -> int:
             risk_payload = compute_risk_radar(cache_dir=cache_dir, top_k=25)
             with open(risk_radar_path, "w", encoding="utf-8") as f:
                 json.dump(risk_payload, f, indent=2)
+        repo_hash = compute_repo_hash(repo_dir)
+        set_retention(
+            repo_hash=repo_hash,
+            mode=retention_mode,
+            ttl_days=int(1 if retention_mode == "session_only" else ttl_days_arg),
+        )
+        touch_access(repo_hash)
     except Exception as e:
         print_json({"ok": False, "error": "ANALYZE_FAILED", "message": str(e)})
         return 1
 
     print_json({
         "ok": True,
+        "source": source,
+        "mode": mode,
+        "auth": auth,
         "cached": not rebuild_required,
+        "rebuilt": rebuild_flag,
+        "cache_cleared": cache_cleared,
+        "refreshed": refreshed,
         "changed_files": delta["changed_files"],
         "incremental": False if version_mismatch else r1.get("incremental", False),
         "reindexed_files": r1.get("reindexed_files", 0),
@@ -628,6 +1416,17 @@ def api_analyze(args) -> int:
         "project_tree_path": project_tree_path,
         "critical_apis": len(metrics.get("critical_apis", [])),
         "orchestrators": len(metrics.get("orchestrators", [])),
+        "repo_url": repo_url,
+        "ref": resolved_ref,
+        "workspace_dir": workspace_dir,
+        "fetched": fetched,
+        "downloaded": downloaded,
+        "zip_url": zip_url,
+        "repo_dir": repo_dir,
+        "retention": {
+            "mode": retention_mode,
+            "ttl_days": int(1 if retention_mode == "session_only" else ttl_days_arg),
+        },
     })
     return 0
 
@@ -665,6 +1464,9 @@ def build_parser() -> argparse.ArgumentParser:
     # -------------------------
     p_api = sub.add_parser("api", help="Machine-readable JSON API over explain.json")
     api_sub = p_api.add_subparsers(dest="api_command", required=True)
+
+    p_api_help = api_sub.add_parser("help", help="Show API command help (JSON)")
+    p_api_help.set_defaults(func=api_cache_help)
 
     p_api_explain = api_sub.add_parser("explain", help="Return JSON explanation for one symbol")
     p_api_explain.add_argument("fqn", help="Fully-qualified symbol name")
@@ -708,8 +1510,72 @@ def build_parser() -> argparse.ArgumentParser:
     p_api_impact.add_argument("--max_nodes", type=int, default=200, help="Node cap per direction")
     p_api_impact.set_defaults(func=api_impact)
 
+    p_api_cache = api_sub.add_parser("cache", help="Manage analysis caches")
+    cache_sub = p_api_cache.add_subparsers(dest="cache_command", required=True)
+
+    p_api_cache_list = cache_sub.add_parser("list", help="List cache directories")
+    p_api_cache_list.set_defaults(func=api_cache_list)
+
+    p_api_cache_policy = cache_sub.add_parser("policy", help="Get or set cache retention policy")
+    cache_policy_sub = p_api_cache_policy.add_subparsers(dest="cache_policy_command", required=True)
+    p_api_cache_policy_get = cache_policy_sub.add_parser("get", help="Show retention policy")
+    p_api_cache_policy_get.set_defaults(func=api_cache_policy_get)
+    p_api_cache_policy_set = cache_policy_sub.add_parser("set", help="Update retention policy")
+    p_api_cache_policy_set.add_argument("--default-ttl-days", type=int, default=None, help="Default TTL for repo cache dirs")
+    p_api_cache_policy_set.add_argument("--workspaces-ttl-days", type=int, default=None, help="Default TTL for unreferenced workspaces")
+    p_api_cache_policy_set.set_defaults(func=api_cache_policy_set)
+
+    p_api_cache_info = cache_sub.add_parser("info", help="Inspect one cache target")
+    p_api_cache_info.add_argument("--path", default=None, help="Local repository path")
+    p_api_cache_info.add_argument("--github", default=None, help="GitHub repository URL")
+    p_api_cache_info.add_argument("--ref", default=None, help="GitHub ref")
+    p_api_cache_info.add_argument("--mode", default="git", choices=["git", "zip"], help="GitHub mode")
+    p_api_cache_info.set_defaults(func=api_cache_info)
+
+    p_api_cache_clear = cache_sub.add_parser("clear", help="Clear one cache target safely")
+    p_api_cache_clear.add_argument("--repo_hash", "--repo-hash", default=None, help="Direct repo hash target")
+    p_api_cache_clear.add_argument("--path", default=None, help="Local repository path")
+    p_api_cache_clear.add_argument("--github", default=None, help="GitHub repository URL")
+    p_api_cache_clear.add_argument("--ref", default=None, help="GitHub ref")
+    p_api_cache_clear.add_argument("--mode", default="git", choices=["git", "zip"], help="GitHub mode")
+    p_api_cache_clear.add_argument("--dry-run", action="store_true", help="Show what would be deleted")
+    p_api_cache_clear.add_argument("--yes", action="store_true", help="Skip confirmation prompt")
+    p_api_cache_clear.add_argument("--include-workspace", action="store_true", help="Also remove workspace even if shared")
+    p_api_cache_clear.set_defaults(func=api_cache_clear)
+
+    p_api_cache_cleanup = cache_sub.add_parser("cleanup", help="Delete expired cache/workspace data using retention policy")
+    p_api_cache_cleanup.add_argument("--apply", action="store_true", help="Apply cleanup immediately (alias for --yes)")
+    p_api_cache_cleanup.add_argument("--dry-run", action="store_true", help="Show what would be deleted")
+    p_api_cache_cleanup.add_argument("--yes", action="store_true", help="Skip confirmation prompt")
+    p_api_cache_cleanup.set_defaults(func=api_cache_cleanup)
+
+    p_api_cache_delete = cache_sub.add_parser("delete", help="Delete all artifacts for one repo cache target")
+    p_api_cache_delete.add_argument("--repo_hash", "--repo-hash", default=None, help="Direct repo hash target")
+    p_api_cache_delete.add_argument("--path", default=None, help="Local repository path")
+    p_api_cache_delete.add_argument("--github", default=None, help="GitHub repository URL")
+    p_api_cache_delete.add_argument("--ref", default=None, help="GitHub ref")
+    p_api_cache_delete.add_argument("--mode", default="git", choices=["git", "zip"], help="GitHub mode")
+    p_api_cache_delete.add_argument("--dry-run", action="store_true", help="Show what would be deleted")
+    p_api_cache_delete.add_argument("--yes", action="store_true", help="Skip confirmation prompt")
+    p_api_cache_delete.set_defaults(func=api_cache_delete)
+
+    p_api_cache_prune = cache_sub.add_parser("prune", help="Prune stale caches by retention policy")
+    p_api_cache_prune.add_argument("--older-than", default="0d", help="Additional age filter (e.g. 14d, 36h)")
+    p_api_cache_prune.add_argument("--dry-run", action="store_true", help="Show what would be deleted")
+    p_api_cache_prune.add_argument("--yes", action="store_true", help="Skip confirmation prompt")
+    p_api_cache_prune.set_defaults(func=api_cache_prune)
+
     p_api_analyze = api_sub.add_parser("analyze", help="Run Phase-4 and explain generation")
-    p_api_analyze.add_argument("--path", default=".", help="Repository directory to analyze")
+    p_api_analyze.add_argument("--path", default=None, help="Repository directory to analyze")
+    p_api_analyze.add_argument("--github", default=None, help="Public GitHub repository URL (https://github.com/<org>/<repo>)")
+    p_api_analyze.add_argument("--ref", default=None, help="Optional Git branch or tag when using --github")
+    p_api_analyze.add_argument("--mode", default="git", choices=["git", "zip"], help="GitHub fetch mode")
+    p_api_analyze.add_argument("--token", default=None, help="GitHub personal access token (optional)")
+    p_api_analyze.add_argument("--refresh", action="store_true", help="GitHub only: delete workspace clone and fetch again")
+    p_api_analyze.add_argument("--rebuild", action="store_true", help="Force full analysis rebuild even if cache is valid")
+    p_api_analyze.add_argument("--clear-cache", action="store_true", help="Delete analysis cache directory before analyze")
+    p_api_analyze.add_argument("--retention", default="ttl", choices=["ttl", "session_only", "pinned"], help="Retention policy mode")
+    p_api_analyze.add_argument("--ttl-days", type=int, default=14, help="TTL in days when retention mode is ttl")
     p_api_analyze.set_defaults(func=api_analyze)
 
 

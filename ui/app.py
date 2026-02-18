@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -11,7 +13,16 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from analysis.utils.cache_manager import compute_repo_hash, get_cache_dir
+from analysis.utils.cache_manager import (
+    compute_repo_hash,
+    get_cache_dir,
+    load_policy as load_retention_policy,
+    save_policy as save_retention_policy,
+    cleanup as cleanup_retention_data,
+    delete_repo as delete_repo_cache,
+    set_repo_policy,
+    compute_expiration,
+)
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -35,6 +46,20 @@ def _load_json(path: str, default: Any) -> Any:
         return default
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def _cache_dir_size(path: str) -> int:
+    total = 0
+    if not os.path.isdir(path):
+        return 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            fp = os.path.join(root, name)
+            try:
+                total += int(os.path.getsize(fp))
+            except OSError:
+                continue
+    return int(total)
 
 
 def _resolve_repo_dir(repo_dir: Optional[str]) -> str:
@@ -105,6 +130,40 @@ def _load_workspaces() -> Dict[str, Any]:
     return {"active_repo_hash": "", "repos": []}
 
 
+def _cache_manifest(cache_dir: str) -> Dict[str, Any]:
+    path = os.path.join(cache_dir, "manifest.json")
+    data = _load_json(path, {})
+    return data if isinstance(data, dict) else {}
+
+
+def _list_cache_status() -> List[Dict[str, Any]]:
+    policy = load_retention_policy()
+    items: List[Dict[str, Any]] = []
+    if not os.path.isdir(GLOBAL_CACHE_DIR):
+        return items
+    for name in sorted(os.listdir(GLOBAL_CACHE_DIR)):
+        if name in {"workspaces", "workspaces.json", "retention.json"}:
+            continue
+        cache_dir = os.path.join(GLOBAL_CACHE_DIR, name)
+        if not os.path.isdir(cache_dir):
+            continue
+        manifest = _cache_manifest(cache_dir)
+        manifest.setdefault("repo_hash", name)
+        exp = compute_expiration(manifest, policy)
+        repo_path = manifest.get("repo_path") if isinstance(manifest.get("repo_path"), str) else ""
+        items.append(
+            {
+                "repo_hash": name,
+                "repo_path": repo_path,
+                "cache_dir": cache_dir,
+                "size_bytes": _cache_dir_size(cache_dir),
+                "last_updated": manifest.get("updated_at"),
+                "retention": exp,
+            }
+        )
+    return items
+
+
 def _save_workspaces(ws: Dict[str, Any]) -> None:
     _save_json(WORKSPACES_PATH, ws)
 
@@ -117,6 +176,28 @@ def _repo_entry(repo_dir: str) -> Dict[str, str]:
         "path": resolved,
         "repo_hash": repo_hash,
         "last_opened": _now_utc(),
+        "source": "filesystem",
+        "repo_url": "",
+        "ref": "",
+        "mode": "",
+    }
+
+
+def _repo_entry_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    path = _resolve_repo_dir(str(payload.get("path", "") or ""))
+    repo_hash = str(payload.get("repo_hash", "") or compute_repo_hash(path))
+    source = str(payload.get("source", "filesystem") or "filesystem")
+    if source not in {"filesystem", "github"}:
+        source = "filesystem"
+    return {
+        "name": str(payload.get("name") or os.path.basename(path.rstrip("\\/")) or path),
+        "path": path,
+        "repo_hash": repo_hash,
+        "last_opened": _now_utc(),
+        "source": source,
+        "repo_url": str(payload.get("repo_url", "") or ""),
+        "ref": str(payload.get("ref", "") or ""),
+        "mode": str(payload.get("mode", "") or ""),
     }
 
 
@@ -130,6 +211,74 @@ def _ensure_default_workspace() -> Dict[str, Any]:
         ws = {"active_repo_hash": entry["repo_hash"], "repos": [entry]}
         _save_workspaces(ws)
     return ws
+
+
+def _upsert_workspace_repo(entry: Dict[str, Any], set_active: bool = True) -> Dict[str, Any]:
+    ws = _load_workspaces()
+    repos = ws.get("repos", [])
+    if not isinstance(repos, list):
+        repos = []
+    existing = next((r for r in repos if isinstance(r, dict) and r.get("repo_hash") == entry.get("repo_hash")), None)
+    if existing:
+        existing.update(entry)
+        existing["last_opened"] = _now_utc()
+    else:
+        repos.append(entry)
+    ws["repos"] = repos
+    if set_active:
+        ws["active_repo_hash"] = str(entry.get("repo_hash", "") or "")
+    _save_workspaces(ws)
+    return ws
+
+
+def _cli_json(args: List[str], timeout_sec: int = 1800) -> Dict[str, Any]:
+    cmd = [sys.executable, os.path.join(PROJECT_ROOT, "cli.py"), "api"] + list(args)
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "CLI_TIMEOUT", "message": "CLI analyze timed out"}
+    except Exception as e:
+        return {"ok": False, "error": "CLI_EXEC_FAILED", "message": str(e)}
+
+    stdout = (proc.stdout or "").strip()
+    stderr = (proc.stderr or "").strip()
+    payload: Dict[str, Any]
+    try:
+        payload = json.loads(stdout) if stdout else {"ok": False, "error": "EMPTY_OUTPUT", "message": "CLI returned empty output"}
+    except Exception:
+        payload = {
+            "ok": False,
+            "error": "INVALID_CLI_JSON",
+            "message": "Failed to parse CLI JSON output",
+            "stdout": stdout[-4000:],
+            "stderr": stderr[-4000:],
+        }
+    if proc.returncode != 0 and payload.get("ok") is not False:
+        payload = {
+            "ok": False,
+            "error": "CLI_FAILED",
+            "message": stderr or payload.get("message") or "CLI command failed",
+            "stdout": stdout[-4000:],
+            "stderr": stderr[-4000:],
+        }
+    return payload
+
+
+def _repo_analyze_command(repo: Dict[str, Any]) -> str:
+    source = str(repo.get("source", "filesystem") or "filesystem")
+    if source == "github":
+        repo_url = str(repo.get("repo_url", "") or "").strip()
+        ref = str(repo.get("ref", "") or "").strip() or "main"
+        mode = str(repo.get("mode", "") or "zip")
+        return f"python cli.py api analyze --github {repo_url} --ref {ref} --mode {mode}"
+    return f"python cli.py api analyze --path {repo.get('path', '<repo>')}"
 
 
 def _get_active_repo_entry() -> Optional[Dict[str, str]]:
@@ -207,6 +356,75 @@ def _load_repo_data(ctx: Dict[str, str]) -> Dict[str, Any]:
     explain = _load_json(ctx["explain_path"], {})
     resolved_calls = _load_json(ctx["resolved_calls_path"], [])
     return {"explain": explain, "resolved_calls": resolved_calls}
+
+
+def _repo_registry_data() -> List[Dict[str, Any]]:
+    ws = _ensure_default_workspace()
+    policy = load_retention_policy()
+    repos = ws.get("repos", []) if isinstance(ws, dict) else []
+    items: List[Dict[str, Any]] = []
+    seen = set()
+
+    for repo in repos:
+        if not isinstance(repo, dict):
+            continue
+        entry = _repo_entry_from_payload(repo)
+        repo_hash = entry["repo_hash"]
+        if not repo_hash:
+            continue
+        seen.add(repo_hash)
+        cache_dir = get_cache_dir(entry["path"])
+        explain_path = os.path.join(cache_dir, "explain.json")
+        resolved_path = os.path.join(cache_dir, "resolved_calls.json")
+        has_analysis = os.path.exists(explain_path) and os.path.exists(resolved_path)
+        manifest = _cache_manifest(cache_dir)
+        manifest.setdefault("repo_hash", repo_hash)
+        expiry = compute_expiration(manifest, policy)
+        items.append(
+            {
+                "repo_hash": repo_hash,
+                "name": entry.get("name", ""),
+                "source": entry.get("source", "filesystem"),
+                "repo_path": entry.get("path", ""),
+                "repo_url": entry.get("repo_url", ""),
+                "ref": entry.get("ref", ""),
+                "mode": entry.get("mode", ""),
+                "cache_dir": cache_dir,
+                "has_analysis": bool(has_analysis),
+                "last_updated": manifest.get("updated_at"),
+                "size_bytes": _cache_dir_size(cache_dir),
+                "retention": expiry,
+                "analyze_command": _repo_analyze_command(entry),
+            }
+        )
+
+    # Include cache-only repos not yet in workspace list.
+    for status in _list_cache_status():
+        repo_hash = str(status.get("repo_hash", "") or "")
+        if not repo_hash or repo_hash in seen:
+            continue
+        repo_path = str(status.get("repo_path", "") or "")
+        source = "github" if (os.sep + ".codemap_cache" + os.sep + "workspaces" + os.sep) in repo_path else "filesystem"
+        items.append(
+            {
+                "repo_hash": repo_hash,
+                "name": os.path.basename(repo_path.rstrip("\\/")) or repo_hash,
+                "source": source,
+                "repo_path": repo_path,
+                "repo_url": "",
+                "ref": "",
+                "mode": "zip" if source == "github" else "",
+                "cache_dir": status.get("cache_dir"),
+                "has_analysis": os.path.exists(os.path.join(status.get("cache_dir", ""), "explain.json")),
+                "last_updated": status.get("last_updated"),
+                "size_bytes": int(status.get("size_bytes", 0)),
+                "retention": status.get("retention", {}),
+                "analyze_command": f"python cli.py api analyze --path {repo_path}",
+            }
+        )
+
+    items.sort(key=lambda x: (str(x.get("name", "")).lower(), str(x.get("repo_hash", ""))))
+    return items
 
 
 def _build_symbol_connections(
@@ -394,11 +612,180 @@ def index(request: Request):
 @app.get("/api/workspace")
 def api_workspace():
     ws = _ensure_default_workspace()
+    normalized_repos = []
+    for repo in ws.get("repos", []):
+        if isinstance(repo, dict):
+            normalized_repos.append(_repo_entry_from_payload(repo))
+    ws["repos"] = normalized_repos
+    _save_workspaces(ws)
     return {
         "ok": True,
-        "repos": ws.get("repos", []),
+        "repos": normalized_repos,
         "active_repo_hash": ws.get("active_repo_hash", ""),
     }
+
+
+@app.get("/api/repo_registry")
+def api_repo_registry():
+    ws = _ensure_default_workspace()
+    return {
+        "ok": True,
+        "active_repo_hash": ws.get("active_repo_hash", ""),
+        "repos": _repo_registry_data(),
+    }
+
+
+@app.get("/api/data_privacy")
+def api_data_privacy():
+    policy = load_retention_policy()
+    caches = _list_cache_status()
+    total_size = sum(int(c.get("size_bytes", 0)) for c in caches)
+    expiring = [
+        c for c in caches
+        if c.get("retention", {}).get("mode") != "pinned"
+        and c.get("retention", {}).get("days_left") is not None
+        and float(c["retention"]["days_left"]) <= 3
+    ]
+    oldest_repo = None
+    largest_repo = None
+    if caches:
+        oldest_repo = sorted(caches, key=lambda x: str(x.get("last_updated", "") or ""))[0]
+        largest_repo = sorted(caches, key=lambda x: int(x.get("size_bytes", 0)), reverse=True)[0]
+    return {
+        "ok": True,
+        "policy": policy,
+        "repo_count": len(caches),
+        "total_cache_size_bytes": int(total_size),
+        "last_cleanup_iso": policy.get("last_cleanup_iso", ""),
+        "oldest_repo": {
+            "repo_hash": oldest_repo.get("repo_hash"),
+            "repo_path": oldest_repo.get("repo_path"),
+            "last_updated": oldest_repo.get("last_updated"),
+        } if oldest_repo else None,
+        "largest_repo": {
+            "repo_hash": largest_repo.get("repo_hash"),
+            "repo_path": largest_repo.get("repo_path"),
+            "size_bytes": int(largest_repo.get("size_bytes", 0)),
+        } if largest_repo else None,
+        "caches": caches,
+        "expiring_soon": [
+            {
+                "repo_hash": c.get("repo_hash"),
+                "repo_path": c.get("repo_path"),
+                "days_left": c.get("retention", {}).get("days_left"),
+            }
+            for c in expiring
+        ],
+    }
+
+
+@app.post("/api/data_privacy/policy")
+async def api_data_privacy_policy(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    current = load_retention_policy()
+    default_ttl = payload.get("default_ttl_days", current.get("default_ttl_days", 30))
+    workspace_ttl = payload.get("workspaces_ttl_days", current.get("workspaces_ttl_days", 7))
+    try:
+        default_ttl = int(default_ttl)
+        workspace_ttl = int(workspace_ttl)
+    except Exception:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_POLICY"})
+    if default_ttl < 0 or workspace_ttl < 0:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_POLICY"})
+    updated = save_retention_policy(
+        {
+            "default_ttl_days": default_ttl,
+            "workspaces_ttl_days": workspace_ttl,
+            "never_delete_repo_hashes": current.get("never_delete_repo_hashes", []),
+            "repo_policies": current.get("repo_policies", {}),
+            "last_cleanup_iso": current.get("last_cleanup_iso", ""),
+        }
+    )
+    return {"ok": True, "policy": updated}
+
+
+@app.post("/api/data_privacy/cleanup")
+async def api_data_privacy_cleanup(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    dry_run = bool(payload.get("dry_run", True))
+    yes = bool(payload.get("yes", False))
+    apply_flag = bool(payload.get("apply", False))
+    if apply_flag:
+        dry_run = False
+        yes = True
+    if not dry_run and not yes:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "CONFIRM_REQUIRED", "message": "Set yes=true to run cleanup."},
+        )
+    result = cleanup_retention_data(dry_run=dry_run)
+    return result
+
+
+@app.post("/api/data_privacy/delete_repo")
+async def api_data_privacy_delete_repo(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    repo_hash = str(payload.get("repo_hash", "") or "").strip()
+    dry_run = bool(payload.get("dry_run", True))
+    yes = bool(payload.get("yes", False))
+    if not repo_hash:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_REPO_HASH"})
+    if not dry_run and not yes:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "CONFIRM_REQUIRED", "message": "Set yes=true to delete."},
+        )
+    result = delete_repo_cache(repo_hash=repo_hash, dry_run=dry_run)
+    return result
+
+
+@app.post("/api/data_privacy/delete_analysis")
+async def api_data_privacy_delete_analysis(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    repo_hash = str(payload.get("repo_hash", "") or "").strip()
+    dry_run = bool(payload.get("dry_run", True))
+    yes = bool(payload.get("yes", False))
+    if not repo_hash:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_REPO_HASH"})
+    if not dry_run and not yes:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "CONFIRM_REQUIRED", "message": "Set yes=true to delete."},
+        )
+    result = delete_repo_cache(repo_hash=repo_hash, dry_run=dry_run, remove_workspace_registry=False)
+    return result
+
+
+@app.post("/api/data_privacy/repo_policy")
+async def api_data_privacy_repo_policy(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    repo_hash = str(payload.get("repo_hash", "") or "").strip()
+    policy_value = str(payload.get("policy", "") or "").strip().lower()
+    if not repo_hash:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_REPO_HASH"})
+
+    if policy_value == "never":
+        mode = "pinned"
+        ttl_days = 0
+    elif policy_value == "24h":
+        mode = "ttl"
+        ttl_days = 1
+    elif policy_value == "7d":
+        mode = "ttl"
+        ttl_days = 7
+    elif policy_value == "30d":
+        mode = "ttl"
+        ttl_days = 30
+    else:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_POLICY"})
+
+    policy = set_repo_policy(repo_hash=repo_hash, mode=mode, ttl_days=ttl_days)
+    return {"ok": True, "repo_hash": repo_hash, "policy": policy}
 
 
 @app.post("/api/workspace/add")
@@ -411,26 +798,181 @@ async def api_workspace_add(request: Request):
     if not os.path.isdir(resolved):
         return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_PATH"})
 
-    ws = _load_workspaces()
     entry = _repo_entry(resolved)
-    repos = ws.get("repos", [])
-    existing = next((r for r in repos if r.get("repo_hash") == entry["repo_hash"]), None)
-    if existing:
-        existing["path"] = resolved
-        existing["name"] = entry["name"]
-        existing["last_opened"] = _now_utc()
-    else:
-        repos.append(entry)
-
-    ws["repos"] = repos
-    ws["active_repo_hash"] = entry["repo_hash"]
-    _save_workspaces(ws)
+    _upsert_workspace_repo(entry, set_active=True)
 
     ctx = _repo_ctx_from_dir(resolved)
     _ensure_ui_state(ctx)
     SEARCH_INDEX_CACHE.pop(ctx["repo_hash"], None)
 
     return {"ok": True, "repo_hash": entry["repo_hash"], "path": resolved, "name": entry["name"]}
+
+
+@app.post("/api/repo_import/local")
+async def api_repo_import_local(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    repo_path = str(payload.get("repo_path", "") or "").strip()
+    display_name = str(payload.get("display_name", "") or "").strip()
+    analyze_now = bool(payload.get("analyze", True))
+    open_after_add = bool(payload.get("open_after_add", False))
+    if not repo_path:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_PATH"})
+    resolved = _resolve_repo_dir(repo_path)
+    if not os.path.isdir(resolved):
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_PATH"})
+
+    entry = _repo_entry_from_payload(
+        {
+            "path": resolved,
+            "name": display_name or os.path.basename(resolved.rstrip("\\/")) or resolved,
+            "source": "filesystem",
+        }
+    )
+    ws_before = _load_workspaces()
+    had_active = bool(str(ws_before.get("active_repo_hash", "") or ""))
+    set_active = bool(open_after_add or not had_active)
+    _upsert_workspace_repo(entry, set_active=set_active)
+    ctx = _repo_ctx_from_dir(resolved)
+    _ensure_ui_state(ctx)
+    SEARCH_INDEX_CACHE.pop(ctx["repo_hash"], None)
+    GRAPH_INDEX_CACHE.pop(ctx["repo_hash"], None)
+
+    if not analyze_now:
+        return {"ok": True, "analyzed": False, "repo_hash": entry["repo_hash"], "repo": entry}
+
+    analyze_result = _cli_json(["analyze", "--path", resolved], timeout_sec=3600)
+    if analyze_result.get("ok"):
+        _upsert_workspace_repo(entry, set_active=set_active)
+    return {
+        "ok": bool(analyze_result.get("ok")),
+        "analyzed": bool(analyze_result.get("ok")),
+        "repo_hash": entry["repo_hash"],
+        "repo": entry,
+        "analyze_result": analyze_result,
+    }
+
+
+@app.post("/api/repo_import/github_add")
+async def api_repo_import_github_add(request: Request):
+    from analysis.utils.repo_fetcher import resolve_workspace_paths
+
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    repo_url = str(payload.get("repo_url", "") or "").strip()
+    ref = str(payload.get("ref", "") or "").strip() or "main"
+    mode = str(payload.get("mode", "") or "zip").strip().lower() or "zip"
+    display_name = str(payload.get("display_name", "") or "").strip()
+    open_after_add = bool(payload.get("open_after_add", False))
+    # token is intentionally ignored here; it is never persisted.
+
+    if not repo_url:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_GITHUB_URL", "message": "GitHub URL is required."})
+    if mode not in {"zip", "git"}:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_MODE", "message": "Mode must be zip or git."})
+
+    try:
+        ws_paths = resolve_workspace_paths(repo_url, ref, mode)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_GITHUB_URL", "message": str(e)})
+
+    repo_dir = ws_paths.get("repo_dir", "")
+    repo_name = display_name or ws_paths.get("repo_name", "") or os.path.basename(str(repo_dir).rstrip("\\/")) or "github_repo"
+    entry = _repo_entry_from_payload(
+        {
+            "path": repo_dir,
+            "name": repo_name,
+            "source": "github",
+            "repo_url": ws_paths.get("normalized_url", repo_url),
+            "ref": ref,
+            "mode": mode,
+        }
+    )
+    ws_before = _load_workspaces()
+    had_active = bool(str(ws_before.get("active_repo_hash", "") or ""))
+    set_active = bool(open_after_add or not had_active)
+    _upsert_workspace_repo(entry, set_active=set_active)
+    return {"ok": True, "repo_hash": entry["repo_hash"], "repo": entry, "analyzed": False}
+
+
+@app.post("/api/repo_import/github")
+async def api_repo_import_github(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    repo_url = str(payload.get("repo_url", "") or "").strip()
+    ref = str(payload.get("ref", "") or "").strip() or "main"
+    mode = str(payload.get("mode", "") or "zip").strip().lower() or "zip"
+    token = str(payload.get("token", "") or "")
+
+    if not repo_url:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_GITHUB_URL"})
+    if mode not in {"zip", "git"}:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_MODE"})
+
+    args = ["analyze", "--github", repo_url, "--ref", ref, "--mode", mode]
+    if token.strip():
+        args.extend(["--token", token.strip()])
+    analyze_result = _cli_json(args, timeout_sec=3600)
+    if not analyze_result.get("ok"):
+        return {
+            "ok": False,
+            "error": analyze_result.get("error", "ANALYZE_FAILED"),
+            "message": analyze_result.get("message", "GitHub analyze failed"),
+            "analyze_result": analyze_result,
+        }
+
+    repo_dir = str(analyze_result.get("repo_dir", "") or "").strip()
+    if not repo_dir:
+        return {"ok": False, "error": "MISSING_REPO_DIR", "analyze_result": analyze_result}
+
+    name = os.path.basename(repo_dir.rstrip("\\/")) or repo_dir
+    entry = _repo_entry_from_payload(
+        {
+            "path": repo_dir,
+            "name": name,
+            "source": "github",
+            "repo_url": str(analyze_result.get("repo_url", repo_url) or repo_url),
+            "ref": str(analyze_result.get("ref", ref) or ref),
+            "mode": str(analyze_result.get("mode", mode) or mode),
+        }
+    )
+    _upsert_workspace_repo(entry, set_active=True)
+    ctx = _repo_ctx_from_dir(entry["path"])
+    _ensure_ui_state(ctx)
+    SEARCH_INDEX_CACHE.pop(ctx["repo_hash"], None)
+    GRAPH_INDEX_CACHE.pop(ctx["repo_hash"], None)
+    return {"ok": True, "repo_hash": entry["repo_hash"], "repo": entry, "analyze_result": analyze_result}
+
+
+@app.post("/api/repo_analyze")
+async def api_repo_analyze(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    repo_hash = str(payload.get("repo_hash", "") or "").strip()
+    if not repo_hash:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_REPO_HASH"})
+
+    ws = _ensure_default_workspace()
+    repos = ws.get("repos", [])
+    target = next((r for r in repos if isinstance(r, dict) and str(r.get("repo_hash", "")) == repo_hash), None)
+    if not target:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "REPO_NOT_FOUND"})
+
+    entry = _repo_entry_from_payload(target)
+    source = entry.get("source", "filesystem")
+    if source == "github":
+        repo_url = str(entry.get("repo_url", "") or "").strip()
+        ref = str(entry.get("ref", "") or "").strip() or "main"
+        mode = str(entry.get("mode", "") or "zip")
+        if not repo_url:
+            return JSONResponse(status_code=400, content={"ok": False, "error": "MISSING_GITHUB_METADATA"})
+        result = _cli_json(["analyze", "--github", repo_url, "--ref", ref, "--mode", mode], timeout_sec=3600)
+    else:
+        result = _cli_json(["analyze", "--path", entry["path"]], timeout_sec=3600)
+
+    if result.get("ok"):
+        _upsert_workspace_repo(entry, set_active=True)
+    return {"ok": bool(result.get("ok")), "repo_hash": repo_hash, "analyze_result": result}
 
 
 @app.post("/api/workspace/select")
@@ -451,6 +993,21 @@ async def api_workspace_select(request: Request):
 
     ctx = _repo_ctx_from_dir(target["path"])
     _ensure_ui_state(ctx)
+    return {"ok": True}
+
+
+@app.post("/api/workspace/remove")
+async def api_workspace_remove(request: Request):
+    body = await request.json()
+    repo_hash = str((body or {}).get("repo_hash", "")).strip()
+    if not repo_hash:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_REPO_HASH"})
+    ws = _load_workspaces()
+    repos = ws.get("repos", [])
+    ws["repos"] = [r for r in repos if not (isinstance(r, dict) and str(r.get("repo_hash", "")) == repo_hash)]
+    if str(ws.get("active_repo_hash", "") or "") == repo_hash:
+        ws["active_repo_hash"] = ws["repos"][0]["repo_hash"] if ws["repos"] else ""
+    _save_workspaces(ws)
     return {"ok": True}
 
 

@@ -1,1 +1,0 @@
-# Path resolver utilities

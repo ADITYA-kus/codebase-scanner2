@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const metaEl = document.getElementById("meta");
   const repoNameEl = document.getElementById("repo-name");
   const repoSelectEl = document.getElementById("repo-select");
@@ -29,6 +29,34 @@
   const recentFilesEl = document.getElementById("recent-files");
   const recentSymbolsWrapEl = document.getElementById("recent-symbols-wrap");
   const recentFilesWrapEl = document.getElementById("recent-files-wrap");
+  const repoListContentEl = document.getElementById("repo-list-content");
+  const addRepoInlineEl = document.getElementById("add-repo-inline");
+  const repoInlineCloseEl = document.getElementById("repo-inline-close");
+  const repoTabLocalEl = document.getElementById("repo-tab-local");
+  const repoTabGithubEl = document.getElementById("repo-tab-github");
+  const repoFormLocalEl = document.getElementById("repo-form-local");
+  const repoFormGithubEl = document.getElementById("repo-form-github");
+  const localRepoPathEl = document.getElementById("local-repo-path");
+  const localDisplayNameEl = document.getElementById("local-display-name");
+  const ghRepoUrlEl = document.getElementById("gh-repo-url");
+  const ghRefEl = document.getElementById("gh-ref");
+  const ghModeEl = document.getElementById("gh-mode");
+  const ghTokenEl = document.getElementById("gh-token");
+  const repoOpenAfterAddEl = document.getElementById("repo-open-after-add");
+  const repoModalErrorEl = document.getElementById("repo-modal-error");
+  const repoAddBtnEl = document.getElementById("repo-add-btn");
+  const repoCancelBtnEl = document.getElementById("repo-cancel-btn");
+  const toastEl = document.getElementById("toast");
+  const privacySummaryEl = document.getElementById("privacy-summary");
+  const privacyExpiringEl = document.getElementById("privacy-expiring");
+  const privacyResultEl = document.getElementById("privacy-result");
+  const policyDefaultTtlEl = document.getElementById("policy-default-ttl");
+  const policyWorkspaceTtlEl = document.getElementById("policy-workspace-ttl");
+  const policySaveBtnEl = document.getElementById("policy-save-btn");
+  const cleanupDryBtnEl = document.getElementById("cleanup-dry-btn");
+  const cleanupNowBtnEl = document.getElementById("cleanup-now-btn");
+  const deleteRepoCacheBtnEl = document.getElementById("delete-repo-cache-btn");
+  const autoCleanOnRemoveEl = document.getElementById("auto-clean-on-remove");
 
   const fileCache = new Map();
   const symbolCache = new Map();
@@ -55,6 +83,9 @@
   let riskRadarUpdatedAt = "";
   let riskRadarStatus = "idle"; // idle|loading|ready|missing|error
   let riskRadarError = "";
+  let dataPrivacyCache = null;
+  let repoRegistry = [];
+  let autoCleanOnRemove = false;
 
   function withRepo(path) {
     return new URL(path, window.location.origin).toString();
@@ -71,6 +102,15 @@
     return String(v ?? "").replace(/[&<>"']/g, (ch) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
     })[ch]);
+  }
+
+  function formatBytes(v) {
+    const n = Number(v || 0);
+    if (!Number.isFinite(n) || n <= 0) return "0 B";
+    if (n < 1024) return `${Math.round(n)} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   }
 
   function stripMarkdown(text) {
@@ -108,6 +148,36 @@
     return { className, symbol, display };
   }
 
+  function currentRepoEntry() {
+    return (repoRegistry || []).find((r) => String(r.repo_hash) === String(activeRepoHash)) || null;
+  }
+
+  function analyzeCommandForRepo(repo) {
+    const r = repo || currentRepoEntry();
+    if (!r) return "python cli.py api analyze --path <repo>";
+    if (String(r.source || "filesystem") === "github" && r.repo_url) {
+      const ref = r.ref || "main";
+      const mode = r.mode || "zip";
+      return `python cli.py api analyze --github ${r.repo_url} --ref ${ref} --mode ${mode}`;
+    }
+    return `python cli.py api analyze --path ${r.repo_path || "<repo>"}`;
+  }
+
+  function renderMissingAnalysisCta(msg) {
+    const cmd = analyzeCommandForRepo();
+    return `
+      <div class="missing-analysis-cta">
+        <div class="symbol-name">Analysis not found</div>
+        <div>No analysis data found for this repo. Click "Run Analysis Now" or run:</div>
+        <div class="impact-command">${esc(cmd)}</div>
+        <div class="repo-row-actions">
+          <button id="run-analysis-now-btn" class="repo-btn small" type="button">Run Analysis Now</button>
+        </div>
+        <div class="path">${esc(msg || "After it finishes, refresh this page.")}</div>
+      </div>
+    `;
+  }
+
   function clearWorkspaceView(message) {
     fileCache.clear();
     symbolCache.clear();
@@ -139,6 +209,28 @@
     riskRadarStatus = "idle";
     riskRadarError = "";
     renderRecents();
+  }
+
+  function bindRunAnalysisNowButton() {
+    const btn = document.getElementById("run-analysis-now-btn");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      if (!activeRepoHash) return;
+      await analyzeRepoByHash(activeRepoHash);
+    });
+  }
+
+  function showMissingAnalysisState(message) {
+    const cta = renderMissingAnalysisCta(message);
+    fileViewEl.classList.remove("muted");
+    symbolViewEl.classList.remove("muted");
+    impactViewEl.classList.remove("muted");
+    graphViewEl.classList.remove("muted");
+    fileViewEl.innerHTML = cta;
+    symbolViewEl.innerHTML = cta;
+    impactViewEl.innerHTML = cta;
+    graphViewEl.innerHTML = cta;
+    bindRunAnalysisNowButton();
   }
 
   function graphParams() {
@@ -392,7 +484,7 @@
         </div>
         <div class="card">
           <div class="section-title">Dependency Cycles</div>
-          ${dep.cycle_count ? cycles.slice(0, 50).map((c, i) => `<div class="cycle-row"><span>${esc(c.join(" -> "))}</span><button class="copy-cycle" data-cycle="${esc(c.join(" -> "))}">Copy</button></div>`).join("") : "<div class='ok-cycle'>No cycles detected ✅</div>"}
+          ${dep.cycle_count ? cycles.slice(0, 50).map((c, i) => `<div class="cycle-row"><span>${esc(c.join(" -> "))}</span><button class="copy-cycle" data-cycle="${esc(c.join(" -> "))}">Copy</button></div>`).join("") : "<div class='ok-cycle'>No cycles detected OK</div>"}
         </div>
       `;
 
@@ -489,14 +581,14 @@
         ${mode === "file" ? `<div class="path">Seed symbols: ${seedNodes.size}</div>` : ""}
         <div class="divider"></div>
         <div class="section-title">Incoming Callers (${incoming.length})</div>
-        ${incoming.length ? incoming.slice(0, 200).map((e) => `<div class="graph-edge-row">${nodePill(e.from)} <span class="edge-arrow">→</span> <span class="path">${esc(e.count)}x</span></div>`).join("") : "<div class='muted'>No incoming callers in current depth/filter.</div>"}
+        ${incoming.length ? incoming.slice(0, 200).map((e) => `<div class="graph-edge-row">${nodePill(e.from)} <span class="edge-arrow">-></span> <span class="path">${esc(e.count)}x</span></div>`).join("") : "<div class='muted'>No incoming callers in current depth/filter.</div>"}
         <div class="divider"></div>
         <div class="section-title">Outgoing Callees (${outgoing.length})</div>
         ${outgoing.length ? outgoing.slice(0, 200).map((e) => `<div class="graph-edge-row">${nodePill(e.to)} <span class="path">${esc(e.count)}x</span></div>`).join("") : "<div class='muted'>No outgoing callees in current depth/filter.</div>"}
-        ${mode === "file" ? `<div class="divider"></div><div class="section-title">Internal File Edges (${internal.length})</div>${internal.length ? internal.slice(0, 200).map((e) => `<div class="graph-edge-row">${nodePill(e.from)} <span class="edge-arrow">→</span> ${nodePill(e.to)} <span class="path">${esc(e.count)}x</span></div>`).join("") : "<div class='muted'>No internal edges in current depth/filter.</div>"}` : ""}
+        ${mode === "file" ? `<div class="divider"></div><div class="section-title">Internal File Edges (${internal.length})</div>${internal.length ? internal.slice(0, 200).map((e) => `<div class="graph-edge-row">${nodePill(e.from)} <span class="edge-arrow">-></span> ${nodePill(e.to)} <span class="path">${esc(e.count)}x</span></div>`).join("") : "<div class='muted'>No internal edges in current depth/filter.</div>"}` : ""}
         <div class="divider"></div>
         <div class="section-title">Subgraph Stats</div>
-        <div class="path">Nodes: ${nodes.length} · Edges: ${edges.length} · Depth: ${data.depth}</div>
+        <div class="path">Nodes: ${nodes.length} | Edges: ${edges.length} | Depth: ${data.depth}</div>
       </div>
     `;
 
@@ -571,7 +663,7 @@
         <div class="card impact-card">
           <div class="section-title">Impact</div>
           <div class="path">Target: ${esc(anchor)} | depth: ${esc(data.depth)} | max_nodes: ${esc(data.max_nodes)}</div>
-          ${truncated ? `<div class='impact-truncated-banner'>⚠️ Results truncated (max_nodes=${esc(data.max_nodes)}). Displaying partial results.</div>` : ""}
+          ${truncated ? `<div class='impact-truncated-banner'>Warning: Results truncated (max_nodes=${esc(data.max_nodes)}). Displaying partial results.</div>` : ""}
           <div class="divider"></div>
           <div class="section-title">Upstream${upstreamBadge}</div>
           ${renderImpactList(up.nodes || [], "No upstream dependents in selected depth.")}
@@ -601,8 +693,8 @@
         impactViewEl.classList.remove("muted");
         impactViewEl.innerHTML = `
           <div class="card arch-missing impact-empty-state">
-            <div class="impact-empty-title">⚠️ Analysis not found</div>
-            <div>This repository hasn’t been analyzed yet. Run analysis first.</div>
+            <div class="impact-empty-title">Analysis not found</div>
+            <div>This repository hasn't been analyzed yet. Run analysis first.</div>
             <pre class="impact-command">python cli.py api analyze --path &lt;repo&gt;</pre>
             <div class="path">After it finishes, refresh this page.</div>
           </div>
@@ -734,30 +826,365 @@
     workspaceRepos = ws.repos || [];
     activeRepoHash = ws.active_repo_hash || "";
     renderWorkspaceSelect();
+    await loadRepoRegistry();
+    await loadDataPrivacy();
   }
 
   async function selectWorkspace(repoHash) {
     if (!repoHash) return;
-    await fetchJson("/api/workspace/select", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repo_hash: repoHash }),
-    });
+    try {
+      await fetchJson("/api/workspace/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_hash: repoHash }),
+      });
+    } catch (_e) {
+      const candidate = (repoRegistry || []).find((r) => String(r.repo_hash) === String(repoHash));
+      if (candidate && candidate.repo_path) {
+        await fetchJson("/api/workspace/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: candidate.repo_path }),
+        });
+        await fetchJson("/api/workspace/select", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo_hash: repoHash }),
+        });
+      } else {
+        throw _e;
+      }
+    }
     activeRepoHash = repoHash;
     await refreshForActiveRepo();
   }
 
   async function addWorkspaceRepo() {
-    const value = window.prompt("Enter local repo path");
-    const repoPath = String(value || "").trim();
-    if (!repoPath) return;
-    await fetchJson("/api/workspace/add", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: repoPath }),
+    if (!addRepoInlineEl) return;
+    if (addRepoInlineEl.classList.contains("hidden")) {
+      openRepoPanel("local");
+      return;
+    }
+    closeRepoPanel(false);
+  }
+
+  function repoBadge(repo) {
+    if (!repo) return "";
+    if (!repo.has_analysis) return `<span class="repo-badge not-analyzed">Not analyzed</span>`;
+    const daysLeft = Number(repo && repo.retention ? repo.retention.days_left : NaN);
+    if (Number.isFinite(daysLeft) && daysLeft <= 3 && daysLeft >= 0) {
+      return `<span class="repo-badge expiring">Expiring in ${Math.ceil(daysLeft)}d</span>`;
+    }
+    return `<span class="repo-badge analyzed">Analyzed</span>`;
+  }
+
+  function sourceLabel(repo) {
+    if (!repo) return "filesystem";
+    if (String(repo.source || "") === "github") return `github ${repo.mode || "zip"}`;
+    return "filesystem";
+  }
+
+  function repoPolicyValue(repo) {
+    const r = (repo && repo.retention) || {};
+    const mode = String(r.mode || "ttl");
+    const ttl = Number(r.ttl_days || 30);
+    if (mode === "pinned") return "never";
+    if (ttl <= 1) return "24h";
+    if (ttl <= 7) return "7d";
+    return "30d";
+  }
+
+  function renderRepoRegistry() {
+    if (!repoListContentEl) return;
+    const rows = Array.isArray(repoRegistry) ? repoRegistry : [];
+    if (!rows.length) {
+      repoListContentEl.innerHTML = "<div class='muted'>No repositories known yet.</div>";
+      return;
+    }
+    repoListContentEl.innerHTML = rows.map((r) => `
+      <div class="repo-row" data-repo-hash="${esc(r.repo_hash)}">
+        <div class="repo-row-header">
+          <div class="repo-row-name">${esc(r.name || r.repo_hash)}</div>
+          ${repoBadge(r)}
+        </div>
+        <div class="path">${esc(r.source === "github" ? (r.repo_url || r.repo_path || "") : (r.repo_path || ""))}</div>
+        <div class="path">Source: ${esc(sourceLabel(r))}</div>
+        <div class="path">Cache size: ${esc(formatBytes(r.size_bytes || 0))} | Last analyzed: ${esc(r.last_updated || "unknown")}</div>
+        <div class="path">${esc(r.cache_dir || "")}</div>
+        ${r.source === "github" ? `<div class="path">Workspace: ${esc(r.repo_path || "")}</div>` : ""}
+        <div class="repo-row-actions">
+          <select class="repo-policy-select" data-repo-hash="${esc(r.repo_hash)}">
+            <option value="never" ${repoPolicyValue(r) === "never" ? "selected" : ""}>Never auto-delete</option>
+            <option value="24h" ${repoPolicyValue(r) === "24h" ? "selected" : ""}>Delete after 24 hours</option>
+            <option value="7d" ${repoPolicyValue(r) === "7d" ? "selected" : ""}>Delete after 7 days</option>
+            <option value="30d" ${repoPolicyValue(r) === "30d" ? "selected" : ""}>Delete after 30 days</option>
+          </select>
+          <button class="repo-btn small repo-policy-save-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Set Auto-Delete Policy</button>
+        </div>
+        <div class="repo-row-actions">
+          <button class="repo-btn small repo-open-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Open</button>
+          <button class="repo-btn small repo-analyze-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">${r.has_analysis ? "Re-analyze" : "Analyze"}</button>
+          <button class="repo-btn small danger repo-clear-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Delete Analysis Data</button>
+          <button class="repo-btn small danger repo-delete-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Delete Repo Completely</button>
+          <button class="repo-btn small repo-remove-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Remove from list</button>
+        </div>
+      </div>
+    `).join("");
+
+    repoListContentEl.querySelectorAll(".repo-open-btn").forEach((el) => {
+      el.addEventListener("click", async () => {
+        const repoHash = el.getAttribute("data-repo-hash");
+        if (!repoHash) return;
+        await selectWorkspace(repoHash);
+      });
     });
-    await loadWorkspace();
-    await refreshForActiveRepo();
+    repoListContentEl.querySelectorAll(".repo-analyze-btn").forEach((el) => {
+      el.addEventListener("click", async () => {
+        const repoHash = el.getAttribute("data-repo-hash");
+        if (!repoHash) return;
+        await analyzeRepoByHash(repoHash);
+      });
+    });
+    repoListContentEl.querySelectorAll(".repo-clear-btn").forEach((el) => {
+      el.addEventListener("click", async () => {
+        const repoHash = el.getAttribute("data-repo-hash");
+        if (!repoHash) return;
+        await clearRepoByHash(repoHash);
+      });
+    });
+    repoListContentEl.querySelectorAll(".repo-delete-btn").forEach((el) => {
+      el.addEventListener("click", async () => {
+        const repoHash = el.getAttribute("data-repo-hash");
+        if (!repoHash) return;
+        await deleteRepoByHash(repoHash);
+      });
+    });
+    repoListContentEl.querySelectorAll(".repo-remove-btn").forEach((el) => {
+      el.addEventListener("click", async () => {
+        const repoHash = el.getAttribute("data-repo-hash");
+        if (!repoHash) return;
+        await removeRepoFromList(repoHash);
+      });
+    });
+    repoListContentEl.querySelectorAll(".repo-policy-save-btn").forEach((el) => {
+      el.addEventListener("click", async () => {
+        const repoHash = el.getAttribute("data-repo-hash");
+        if (!repoHash) return;
+        const select = repoListContentEl.querySelector(`.repo-policy-select[data-repo-hash="${CSS.escape(repoHash)}"]`);
+        const policy = select ? String(select.value || "30d") : "30d";
+        await setRepoPolicy(repoHash, policy);
+      });
+    });
+  }
+
+  async function loadRepoRegistry() {
+    try {
+      const data = await fetchJson("/api/repo_registry");
+      repoRegistry = Array.isArray(data.repos) ? data.repos : [];
+      renderRepoRegistry();
+    } catch (_e) {
+      repoRegistry = [];
+      if (repoListContentEl) repoListContentEl.innerHTML = "<div class='muted'>Failed to load repo registry.</div>";
+    }
+  }
+
+  async function analyzeRepoByHash(repoHash) {
+    if (!repoHash) return;
+    try {
+      const data = await fetchJson("/api/repo_analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_hash: repoHash }),
+      });
+      if (!data.ok) {
+        window.alert((data.analyze_result && (data.analyze_result.message || data.analyze_result.error)) || "Analyze failed");
+      }
+      await loadWorkspace();
+      if (repoHash) {
+        await selectWorkspace(repoHash);
+      }
+    } catch (e) {
+      window.alert((e && (e.message || e.error)) || "Analyze failed");
+    }
+  }
+
+  async function clearRepoByHash(repoHash) {
+    if (!repoHash) return;
+    if (!window.confirm(`Delete analysis data for repo hash ${repoHash}?`)) return;
+    try {
+      await fetchJson("/api/data_privacy/delete_analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_hash: repoHash, dry_run: false, yes: true }),
+      });
+      await loadRepoRegistry();
+      await loadDataPrivacy();
+      if (String(activeRepoHash) === String(repoHash)) {
+        await refreshForActiveRepo();
+      }
+    } catch (e) {
+      window.alert((e && (e.message || e.error)) || "Delete analysis data failed");
+    }
+  }
+
+  async function deleteRepoByHash(repoHash) {
+    if (!repoHash) return;
+    if (!window.confirm("This will permanently remove analysis data and cloned/downloaded source.")) return;
+    try {
+      await fetchJson("/api/data_privacy/delete_repo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_hash: repoHash, dry_run: false, yes: true }),
+      });
+      await loadWorkspace();
+      await refreshForActiveRepo();
+      await loadDataPrivacy();
+    } catch (e) {
+      window.alert((e && (e.message || e.error)) || "Delete failed");
+    }
+  }
+
+  async function removeRepoFromList(repoHash) {
+    if (!repoHash) return;
+    if (!window.confirm(`Remove repo ${repoHash} from UI list?`)) return;
+    try {
+      await fetchJson("/api/workspace/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_hash: repoHash }),
+      });
+      if (autoCleanOnRemove) {
+        await fetchJson("/api/data_privacy/delete_analysis", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo_hash: repoHash, dry_run: false, yes: true }),
+        });
+      }
+      await loadWorkspace();
+      await refreshForActiveRepo();
+    } catch (e) {
+      window.alert((e && (e.message || e.error)) || "Remove failed");
+    }
+  }
+
+  async function setRepoPolicy(repoHash, policyValue) {
+    try {
+      await fetchJson("/api/data_privacy/repo_policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_hash: repoHash, policy: policyValue }),
+      });
+      await loadRepoRegistry();
+      await loadDataPrivacy();
+    } catch (e) {
+      window.alert((e && (e.message || e.error)) || "Policy update failed");
+    }
+  }
+
+  async function loadDataPrivacy() {
+    if (!privacySummaryEl) return;
+    privacySummaryEl.textContent = "Loading data retention...";
+    privacyExpiringEl.innerHTML = "";
+    try {
+      const data = await fetchJson("/api/data_privacy");
+      dataPrivacyCache = data;
+      const policy = data.policy || {};
+      if (policyDefaultTtlEl) policyDefaultTtlEl.value = String(policy.default_ttl_days ?? 30);
+      if (policyWorkspaceTtlEl) policyWorkspaceTtlEl.value = String(policy.workspaces_ttl_days ?? 7);
+
+      const oldest = data.oldest_repo ? ` | Oldest: ${String(data.oldest_repo.repo_path || data.oldest_repo.repo_hash || "")}` : "";
+      const largest = data.largest_repo ? ` | Largest: ${formatBytes(data.largest_repo.size_bytes || 0)}` : "";
+      privacySummaryEl.textContent = `Repos cached: ${data.repo_count || 0} | Total size: ${formatBytes(data.total_cache_size_bytes || 0)} | Last cleanup: ${data.last_cleanup_iso || "never"}${oldest}${largest}`;
+
+      const expiring = Array.isArray(data.expiring_soon) ? data.expiring_soon : [];
+      if (expiring.length) {
+        privacyExpiringEl.innerHTML = expiring
+          .slice(0, 5)
+          .map((x) => {
+            const target = String(x.repo_path || x.repo_hash || "repo");
+            const days = Number(x.days_left);
+            const label = Number.isFinite(days) ? `${Math.max(0, days).toFixed(1)} days` : "soon";
+            return `<div class="privacy-warning">This repo cache will be auto-deleted in ${esc(label)}: ${esc(target)}</div>`;
+          })
+          .join("");
+      } else {
+        privacyExpiringEl.innerHTML = "<div class='muted'>No caches near expiration.</div>";
+      }
+    } catch (e) {
+      const msg = (e && (e.message || e.error)) || "Failed to load data privacy status";
+      privacySummaryEl.textContent = msg;
+      privacyExpiringEl.innerHTML = "";
+    }
+  }
+
+  async function saveRetentionPolicy() {
+    const defaultTtl = Number(policyDefaultTtlEl && policyDefaultTtlEl.value ? policyDefaultTtlEl.value : 30);
+    const workspaceTtl = Number(policyWorkspaceTtlEl && policyWorkspaceTtlEl.value ? policyWorkspaceTtlEl.value : 7);
+    if (!Number.isFinite(defaultTtl) || defaultTtl < 0 || !Number.isFinite(workspaceTtl) || workspaceTtl < 0) {
+      if (privacyResultEl) privacyResultEl.textContent = "Enter valid non-negative TTL values.";
+      return;
+    }
+    try {
+      const data = await fetchJson("/api/data_privacy/policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          default_ttl_days: Math.floor(defaultTtl),
+          workspaces_ttl_days: Math.floor(workspaceTtl),
+        }),
+      });
+      if (privacyResultEl) privacyResultEl.textContent = `Policy saved: cache ${data.policy.default_ttl_days}d, workspaces ${data.policy.workspaces_ttl_days}d`;
+      await loadDataPrivacy();
+    } catch (e) {
+      if (privacyResultEl) privacyResultEl.textContent = (e && (e.message || e.error)) || "Policy update failed.";
+    }
+  }
+
+  async function runRetentionCleanup(dryRun) {
+    try {
+      if (!dryRun) {
+        const ok = window.confirm("Run cleanup now? This deletes expired cache/workspace data.");
+        if (!ok) return;
+      }
+      const data = await fetchJson("/api/data_privacy/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dry_run: !!dryRun,
+          yes: !dryRun,
+          apply: !dryRun,
+        }),
+      });
+      if (privacyResultEl) {
+        privacyResultEl.textContent = `caches_removed=${(data.caches_removed || []).length}, workspaces_removed=${(data.workspaces_removed || []).length}, freed~${formatBytes(data.freed_bytes_estimate || 0)}`;
+      }
+      await loadDataPrivacy();
+      await loadWorkspace();
+    } catch (e) {
+      if (privacyResultEl) privacyResultEl.textContent = (e && (e.message || e.error)) || "Cleanup failed.";
+    }
+  }
+
+  async function deleteActiveRepoCache() {
+    if (!activeRepoHash) {
+      if (privacyResultEl) privacyResultEl.textContent = "No active repo selected.";
+      return;
+    }
+    const ok = window.confirm(`Delete cached data for repo hash ${activeRepoHash}?`);
+    if (!ok) return;
+    try {
+      const data = await fetchJson("/api/data_privacy/delete_repo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_hash: activeRepoHash, dry_run: false, yes: true }),
+      });
+      if (privacyResultEl) privacyResultEl.textContent = `Deleted cache for ${data.repo_hash}. Freed~${formatBytes(data.freed_bytes_estimate || 0)}`;
+      await loadWorkspace();
+      await refreshForActiveRepo();
+      await loadDataPrivacy();
+    } catch (e) {
+      if (privacyResultEl) privacyResultEl.textContent = (e && (e.message || e.error)) || "Delete failed.";
+    }
   }
 
   function renderTreeNode(node, parentEl) {
@@ -801,6 +1228,9 @@
       lastSymbol = "";
       renderRecents();
       clearWorkspaceView(msg);
+      if (e && String(e.error || "") === "CACHE_NOT_FOUND") {
+        showMissingAnalysisState(msg);
+      }
       return false;
     }
   }
@@ -819,6 +1249,9 @@
     } catch (e) {
       treeEl.innerHTML = "";
       treeStatusEl.textContent = (e && (e.error || e.message)) || "Failed to load tree";
+      if (e && String(e.error || "") === "CACHE_NOT_FOUND") {
+        showMissingAnalysisState((e && (e.message || e.error)) || "Missing analysis");
+      }
       return false;
     }
   }
@@ -970,13 +1403,13 @@
     const rows = currentSearchResults.map((r) => `
       <button class="search-row" data-fqn="${esc(r.fqn)}" data-file="${esc(r.file)}">
         <div class="search-primary">${esc(r.display)}</div>
-        <div class="search-secondary">${esc(r.module)}${r.file ? ` · ${esc(r.file)}:${esc(r.line)}` : ""}</div>
+        <div class="search-secondary">${esc(r.module)}${r.file ? ` | ${esc(r.file)}:${esc(r.line)}` : ""}</div>
       </button>
     `).join("");
 
     searchResultsEl.innerHTML = `
       ${rows}
-      ${truncated ? "<div class='search-more'>Showing first 20…</div>" : ""}
+      ${truncated ? "<div class='search-more'>Showing first 20...</div>" : ""}
     `;
     searchResultsEl.classList.remove("hidden");
 
@@ -1047,13 +1480,226 @@
     }
     if (addRepoBtnEl) {
       addRepoBtnEl.addEventListener("click", async () => {
+        await addWorkspaceRepo();
+      });
+    }
+  }
+
+  let repoInlineBound = false;
+  let repoAddInFlight = false;
+  let repoAddAbortController = null;
+
+  function showToast(message, type) {
+    if (!toastEl) return;
+    toastEl.textContent = String(message || "");
+    toastEl.classList.remove("hidden", "error");
+    if (String(type || "") === "error") toastEl.classList.add("error");
+    window.setTimeout(() => {
+      toastEl.classList.add("hidden");
+    }, 2200);
+  }
+
+  function setRepoPanelTab(tab) {
+    const local = tab !== "github";
+    if (repoTabLocalEl) repoTabLocalEl.classList.toggle("active", local);
+    if (repoTabGithubEl) repoTabGithubEl.classList.toggle("active", !local);
+    if (repoFormLocalEl) repoFormLocalEl.classList.toggle("hidden", !local);
+    if (repoFormGithubEl) repoFormGithubEl.classList.toggle("hidden", local);
+    validateRepoPanel();
+  }
+
+  function resetRepoPanelState() {
+    if (localRepoPathEl) localRepoPathEl.value = "";
+    if (localDisplayNameEl) localDisplayNameEl.value = "";
+    if (ghRepoUrlEl) ghRepoUrlEl.value = "";
+    if (ghRefEl) ghRefEl.value = "main";
+    if (ghModeEl) ghModeEl.value = "zip";
+    if (ghTokenEl) ghTokenEl.value = "";
+    if (repoOpenAfterAddEl) repoOpenAfterAddEl.checked = true;
+    if (repoModalErrorEl) repoModalErrorEl.textContent = "";
+    repoAddInFlight = false;
+    repoAddAbortController = null;
+    setRepoPanelLoading(false);
+  }
+
+  function setRepoPanelLoading(isLoading) {
+    if (repoAddBtnEl) {
+      repoAddBtnEl.disabled = !!isLoading;
+      repoAddBtnEl.textContent = isLoading ? "Adding..." : "Add repo";
+      repoAddBtnEl.classList.toggle("is-loading", !!isLoading);
+    }
+    if (repoCancelBtnEl) repoCancelBtnEl.disabled = false;
+    if (repoInlineCloseEl) repoInlineCloseEl.disabled = false;
+    validateRepoPanel();
+  }
+
+  function validateRepoPanel() {
+    const githubActive = repoFormGithubEl && !repoFormGithubEl.classList.contains("hidden");
+    let valid = false;
+    let message = "";
+    if (githubActive) {
+      const url = String(ghRepoUrlEl && ghRepoUrlEl.value ? ghRepoUrlEl.value : "").trim();
+      const ok = /^https:\/\/github\.com\/[^\/\s]+\/[^\/\s]+\/?(\.git)?$/i.test(url) || /^https:\/\/github\.com\/[^\/\s]+\/[^\/\s]+(\.git)?$/i.test(url);
+      valid = !!url && ok;
+      if (url && !ok) message = "Invalid GitHub URL.";
+    } else {
+      const path = String(localRepoPathEl && localRepoPathEl.value ? localRepoPathEl.value : "").trim();
+      valid = !!path;
+      if (!path) message = "Local path is required.";
+    }
+    if (repoModalErrorEl && !repoAddInFlight) repoModalErrorEl.textContent = message;
+    if (repoAddBtnEl) repoAddBtnEl.disabled = repoAddInFlight || !valid;
+    return valid;
+  }
+
+  function openRepoPanel(tab) {
+    if (!addRepoInlineEl) return;
+    resetRepoPanelState();
+    addRepoInlineEl.classList.remove("hidden");
+    setRepoPanelTab(tab || "local");
+    if (localRepoPathEl) localRepoPathEl.focus();
+  }
+
+  function closeRepoPanel(force) {
+    if (!addRepoInlineEl) return;
+    if (repoAddInFlight && !force) {
+      const shouldClose = window.confirm("Request in progress. Close anyway?");
+      if (!shouldClose) return;
+      if (repoAddAbortController) {
+        try { repoAddAbortController.abort(); } catch (_e) {}
+      }
+    }
+    addRepoInlineEl.classList.add("hidden");
+    resetRepoPanelState();
+  }
+
+  async function runAddRepository() {
+    if (!validateRepoPanel()) return;
+    const wasActiveRepo = activeRepoHash;
+    const hadSelection = !!wasActiveRepo;
+    const openAfterAdd = !!(repoOpenAfterAddEl && repoOpenAfterAddEl.checked);
+    const githubActive = repoFormGithubEl && !repoFormGithubEl.classList.contains("hidden");
+
+    repoAddInFlight = true;
+    repoAddAbortController = new AbortController();
+    setRepoPanelLoading(true);
+    if (repoModalErrorEl) repoModalErrorEl.textContent = "";
+
+    try {
+      let data;
+      if (githubActive) {
+        const repoUrl = String(ghRepoUrlEl && ghRepoUrlEl.value ? ghRepoUrlEl.value : "").trim();
+        const ref = String(ghRefEl && ghRefEl.value ? ghRefEl.value : "main").trim() || "main";
+        const mode = String(ghModeEl && ghModeEl.value ? ghModeEl.value : "zip").trim() || "zip";
+        const token = String(ghTokenEl && ghTokenEl.value ? ghTokenEl.value : "");
+        const displayName = "";
+        data = await fetchJson("/api/repo_import/github_add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo_url: repoUrl, ref, mode, token, display_name: displayName, open_after_add: openAfterAdd }),
+          signal: repoAddAbortController.signal,
+        });
+      } else {
+        const repoPath = String(localRepoPathEl && localRepoPathEl.value ? localRepoPathEl.value : "").trim();
+        const displayName = String(localDisplayNameEl && localDisplayNameEl.value ? localDisplayNameEl.value : "").trim();
+        data = await fetchJson("/api/repo_import/local", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo_path: repoPath, display_name: displayName, analyze: false, open_after_add: openAfterAdd }),
+          signal: repoAddAbortController.signal,
+        });
+      }
+
+      const addedName = (data && data.repo && data.repo.name) ? data.repo.name : "Repository";
+      showToast(`Repo added: ${addedName}`, "success");
+      closeRepoPanel(true);
+
+      // Refresh/selection updates run after close so modal never blocks app interaction.
+      try {
+        await loadWorkspace();
+        await loadRepoRegistry();
+        if (!hadSelection || openAfterAdd) {
+          if (data.repo_hash) {
+            await selectWorkspace(data.repo_hash);
+          }
+        } else if (wasActiveRepo && data.repo_hash !== wasActiveRepo) {
+          await selectWorkspace(wasActiveRepo);
+        }
+      } catch (_postSuccessErr) {
+        // Keep app usable; repo add already succeeded.
+      }
+    } catch (e) {
+      if (repoModalErrorEl) repoModalErrorEl.textContent = (e && (e.message || e.error)) || "Failed to add repository.";
+      showToast((e && (e.message || e.error)) || "Failed to add repository.", "error");
+    } finally {
+      if (ghTokenEl) ghTokenEl.value = "";
+      repoAddInFlight = false;
+      repoAddAbortController = null;
+      setRepoPanelLoading(false);
+    }
+  }
+
+  function bindDataPrivacyControls() {
+    try {
+      autoCleanOnRemove = window.localStorage.getItem("codemap_auto_clean_on_remove") === "1";
+    } catch (_e) {
+      autoCleanOnRemove = false;
+    }
+    if (autoCleanOnRemoveEl) {
+      autoCleanOnRemoveEl.checked = !!autoCleanOnRemove;
+      autoCleanOnRemoveEl.addEventListener("change", () => {
+        autoCleanOnRemove = !!autoCleanOnRemoveEl.checked;
         try {
-          await addWorkspaceRepo();
-        } catch (e) {
-          window.alert((e && (e.message || e.error)) || "Failed to add repo");
+          window.localStorage.setItem("codemap_auto_clean_on_remove", autoCleanOnRemove ? "1" : "0");
+        } catch (_e) {
+          // ignore
         }
       });
     }
+    if (policySaveBtnEl) {
+      policySaveBtnEl.addEventListener("click", () => {
+        saveRetentionPolicy();
+      });
+    }
+    if (cleanupDryBtnEl) {
+      cleanupDryBtnEl.addEventListener("click", () => {
+        runRetentionCleanup(true);
+      });
+    }
+    if (cleanupNowBtnEl) {
+      cleanupNowBtnEl.addEventListener("click", () => {
+        runRetentionCleanup(false);
+      });
+    }
+    if (deleteRepoCacheBtnEl) {
+      deleteRepoCacheBtnEl.addEventListener("click", () => {
+        deleteActiveRepoCache();
+      });
+    }
+  }
+
+  function bindRepoInlineControls() {
+    if (repoInlineBound) return;
+    repoInlineBound = true;
+    if (repoInlineCloseEl) repoInlineCloseEl.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeRepoPanel(false);
+    });
+    if (repoCancelBtnEl) repoCancelBtnEl.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeRepoPanel(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && addRepoInlineEl && !addRepoInlineEl.classList.contains("hidden")) {
+        closeRepoPanel(false);
+      }
+    });
+    if (repoTabLocalEl) repoTabLocalEl.addEventListener("click", () => setRepoPanelTab("local"));
+    if (repoTabGithubEl) repoTabGithubEl.addEventListener("click", () => setRepoPanelTab("github"));
+    if (repoAddBtnEl) repoAddBtnEl.addEventListener("click", () => runAddRepository());
+    if (localRepoPathEl) localRepoPathEl.addEventListener("input", () => validateRepoPanel());
+    if (ghRepoUrlEl) ghRepoUrlEl.addEventListener("input", () => validateRepoPanel());
   }
 
   function bindGraphControls() {
@@ -1130,7 +1776,7 @@
   }
 
   function renderEmptyState(text) {
-    return `<div class="empty-state">✓ ${esc(text)}</div>`;
+    return `<div class="empty-state">OK ${esc(text)}</div>`;
   }
 
   function showSymbolLoading() {
@@ -1216,7 +1862,7 @@
           <div class="section-title">Called by</div>
           ${renderConnectionBlock(calledBy, (c) => `
             <div>
-              <span class="conn-arrow">↗</span><span class="connection-link" data-fqn="${esc(c.fqn)}">${esc(c.fqn)}</span>
+              <span class="conn-arrow">-></span><span class="connection-link" data-fqn="${esc(c.fqn)}">${esc(c.fqn)}</span>
               <span class="path">${esc(c.file)}:${esc(c.line)}</span>
             </div>
           `, "No callers found")}
@@ -1225,10 +1871,10 @@
           ${renderConnectionBlock(calls, (c) => `
             <div>
               ${c.clickable
-                ? `<span class="conn-arrow">↗</span><span class="connection-link" data-fqn="${esc(c.fqn)}">${esc(c.name)}</span>`
+                ? `<span class="conn-arrow">-></span><span class="connection-link" data-fqn="${esc(c.fqn)}">${esc(c.name)}</span>`
                 : `<span class="connection-muted">${esc(c.name)}</span>`
               }
-              <span class="path">(${esc(c.count)}×)</span>
+              <span class="path">(${esc(c.count)}x)</span>
             </div>
           `, "No calls found")}
           <div class="divider"></div>
@@ -1236,14 +1882,14 @@
           ${renderConnectionBlock(calls.slice(0, 10), (c) => `
             <div>
               <span class="${c.clickable ? "connection-link" : "connection-muted"}" ${c.clickable ? `data-fqn="${esc(c.fqn)}"` : ""}>${esc(c.name)}</span>
-              <span class="path">(${esc(c.count)}×)</span>
+              <span class="path">(${esc(c.count)}x)</span>
             </div>
           `, "No callees found")}
           <div id="used-in-section" class="divider"></div>
           <div class="section-title">Used in</div>
           ${renderConnectionBlock(usedIn, (u) => `
             <div>
-              <span class="conn-arrow">↗</span><span class="connection-link" data-fqn="${esc(u.fqn)}">${esc(u.fqn)}</span>
+              <span class="conn-arrow">-></span><span class="connection-link" data-fqn="${esc(u.fqn)}">${esc(u.fqn)}</span>
               <span class="path">${esc(u.file)}:${esc(u.line)}</span>
             </div>
           `, "No usages found")}
@@ -1281,7 +1927,9 @@
     riskRadarUpdatedAt = "";
     riskRadarStatus = "idle";
     riskRadarError = "";
+    await loadRepoRegistry();
     const okMeta = await loadMeta();
+    await loadDataPrivacy();
     if (!okMeta) return;
     await loadTree();
     await loadUiState();
@@ -1297,6 +1945,8 @@
   async function init() {
     bindSearchInput();
     bindWorkspaceControls();
+    bindRepoInlineControls();
+    bindDataPrivacyControls();
     bindGraphControls();
     setActiveTab("details");
     try {
@@ -1310,3 +1960,4 @@
 
   init();
 })();
+

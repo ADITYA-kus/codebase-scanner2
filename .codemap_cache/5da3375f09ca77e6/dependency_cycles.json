@@ -1,8 +1,0 @@
-{
-  "ok": true,
-  "repo_prefix": "testing_repo",
-  "modules": 2,
-  "edges": 1,
-  "cycle_count": 0,
-  "cycles": []
-}
