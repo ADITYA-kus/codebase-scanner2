@@ -450,6 +450,16 @@ body {
   margin-top: 4px;
 }
 
+.private-mode {
+  border: 1px solid #d8eadf;
+  background: #f4fbf6;
+  color: #275d37;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .toast {
   position: fixed;
   right: 16px;

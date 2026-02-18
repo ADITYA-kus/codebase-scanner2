@@ -42,6 +42,7 @@
   const ghRefEl = document.getElementById("gh-ref");
   const ghModeEl = document.getElementById("gh-mode");
   const ghTokenEl = document.getElementById("gh-token");
+  const privateModeIndicatorEl = document.getElementById("private-mode-indicator");
   const repoOpenAfterAddEl = document.getElementById("repo-open-after-add");
   const repoModalErrorEl = document.getElementById("repo-modal-error");
   const repoAddBtnEl = document.getElementById("repo-add-btn");
@@ -102,6 +103,16 @@
     return String(v ?? "").replace(/[&<>"']/g, (ch) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
     })[ch]);
+  }
+
+  function redactSecrets(v) {
+    let value = String(v || "");
+    value = value.replace(/\bgh[pousr]_[A-Za-z0-9_]{8,}\b/g, (m) => `${m.slice(0, 4)}************`);
+    value = value.replace(/\bBearer\s+[^\s]+/gi, "Bearer ********");
+    value = value.replace(/\bBasic\s+[^\s]+/gi, "Basic ********");
+    value = value.replace(/(https?:\/\/)([^/\s:@]+):([^@\s/]+)@/gi, "$1***:***@");
+    value = value.replace(/\b(token|api[_-]?key|password)\s*[:=]\s*[^\s'"`]+/gi, "$1=[REDACTED]");
+    return value;
   }
 
   function formatBytes(v) {
@@ -341,7 +352,7 @@
         repoSummaryError = "";
       } else {
         repoSummaryStatus = "error";
-        repoSummaryError = (e && (e.message || e.error)) || "Repo summary load failed";
+        repoSummaryError = redactSecrets((e && (e.message || e.error)) || "Repo summary load failed");
       }
     }
   }
@@ -438,7 +449,7 @@
         riskRadarError = "";
       } else {
         riskRadarStatus = "error";
-        riskRadarError = (e && (e.message || e.error)) || "Risk radar load failed";
+        riskRadarError = redactSecrets((e && (e.message || e.error)) || "Risk radar load failed");
       }
     }
   }
@@ -702,7 +713,7 @@
         return;
       }
       impactViewEl.classList.add("muted");
-      impactViewEl.textContent = (e && (e.error || e.message)) || "Impact unavailable.";
+      impactViewEl.textContent = redactSecrets((e && (e.error || e.message)) || "Impact unavailable.");
     }
   }
 
@@ -733,7 +744,7 @@
       renderGraphData(data);
     } catch (e) {
       graphViewEl.classList.add("muted");
-      graphViewEl.textContent = (e && (e.error || e.message)) || "Graph unavailable.";
+      graphViewEl.textContent = redactSecrets((e && (e.error || e.message)) || "Graph unavailable.");
     }
   }
 
@@ -1004,7 +1015,7 @@
         await selectWorkspace(repoHash);
       }
     } catch (e) {
-      window.alert((e && (e.message || e.error)) || "Analyze failed");
+      window.alert(redactSecrets((e && (e.message || e.error)) || "Analyze failed"));
     }
   }
 
@@ -1023,7 +1034,7 @@
         await refreshForActiveRepo();
       }
     } catch (e) {
-      window.alert((e && (e.message || e.error)) || "Delete analysis data failed");
+      window.alert(redactSecrets((e && (e.message || e.error)) || "Delete analysis data failed"));
     }
   }
 
@@ -1040,7 +1051,7 @@
       await refreshForActiveRepo();
       await loadDataPrivacy();
     } catch (e) {
-      window.alert((e && (e.message || e.error)) || "Delete failed");
+      window.alert(redactSecrets((e && (e.message || e.error)) || "Delete failed"));
     }
   }
 
@@ -1063,7 +1074,7 @@
       await loadWorkspace();
       await refreshForActiveRepo();
     } catch (e) {
-      window.alert((e && (e.message || e.error)) || "Remove failed");
+      window.alert(redactSecrets((e && (e.message || e.error)) || "Remove failed"));
     }
   }
 
@@ -1077,7 +1088,7 @@
       await loadRepoRegistry();
       await loadDataPrivacy();
     } catch (e) {
-      window.alert((e && (e.message || e.error)) || "Policy update failed");
+      window.alert(redactSecrets((e && (e.message || e.error)) || "Policy update failed"));
     }
   }
 
@@ -1111,7 +1122,7 @@
         privacyExpiringEl.innerHTML = "<div class='muted'>No caches near expiration.</div>";
       }
     } catch (e) {
-      const msg = (e && (e.message || e.error)) || "Failed to load data privacy status";
+      const msg = redactSecrets((e && (e.message || e.error)) || "Failed to load data privacy status");
       privacySummaryEl.textContent = msg;
       privacyExpiringEl.innerHTML = "";
     }
@@ -1136,7 +1147,7 @@
       if (privacyResultEl) privacyResultEl.textContent = `Policy saved: cache ${data.policy.default_ttl_days}d, workspaces ${data.policy.workspaces_ttl_days}d`;
       await loadDataPrivacy();
     } catch (e) {
-      if (privacyResultEl) privacyResultEl.textContent = (e && (e.message || e.error)) || "Policy update failed.";
+      if (privacyResultEl) privacyResultEl.textContent = redactSecrets((e && (e.message || e.error)) || "Policy update failed.");
     }
   }
 
@@ -1161,7 +1172,7 @@
       await loadDataPrivacy();
       await loadWorkspace();
     } catch (e) {
-      if (privacyResultEl) privacyResultEl.textContent = (e && (e.message || e.error)) || "Cleanup failed.";
+      if (privacyResultEl) privacyResultEl.textContent = redactSecrets((e && (e.message || e.error)) || "Cleanup failed.");
     }
   }
 
@@ -1183,7 +1194,7 @@
       await refreshForActiveRepo();
       await loadDataPrivacy();
     } catch (e) {
-      if (privacyResultEl) privacyResultEl.textContent = (e && (e.message || e.error)) || "Delete failed.";
+      if (privacyResultEl) privacyResultEl.textContent = redactSecrets((e && (e.message || e.error)) || "Delete failed.");
     }
   }
 
@@ -1220,7 +1231,7 @@
       metaEl.textContent = `${meta.repo_hash} | symbols ${counts.symbols || 0} | calls ${counts.resolved_calls || 0}`;
       return true;
     } catch (e) {
-      const msg = (e && (e.message || e.error)) || "Metadata unavailable";
+      const msg = redactSecrets((e && (e.message || e.error)) || "Metadata unavailable");
       if (repoNameEl) repoNameEl.textContent = "No repo";
       metaEl.textContent = msg;
       recentSymbols = [];
@@ -1248,9 +1259,9 @@
       return true;
     } catch (e) {
       treeEl.innerHTML = "";
-      treeStatusEl.textContent = (e && (e.error || e.message)) || "Failed to load tree";
+      treeStatusEl.textContent = redactSecrets((e && (e.error || e.message)) || "Failed to load tree");
       if (e && String(e.error || "") === "CACHE_NOT_FOUND") {
-        showMissingAnalysisState((e && (e.message || e.error)) || "Missing analysis");
+        showMissingAnalysisState(redactSecrets((e && (e.message || e.error)) || "Missing analysis"));
       }
       return false;
     }
@@ -1491,12 +1502,18 @@
 
   function showToast(message, type) {
     if (!toastEl) return;
-    toastEl.textContent = String(message || "");
+    toastEl.textContent = redactSecrets(String(message || ""));
     toastEl.classList.remove("hidden", "error");
     if (String(type || "") === "error") toastEl.classList.add("error");
     window.setTimeout(() => {
       toastEl.classList.add("hidden");
     }, 2200);
+  }
+
+  function updatePrivateModeIndicator() {
+    if (!privateModeIndicatorEl) return;
+    const hasToken = !!(ghTokenEl && String(ghTokenEl.value || "").trim());
+    privateModeIndicatorEl.classList.toggle("hidden", !hasToken);
   }
 
   function setRepoPanelTab(tab) {
@@ -1515,6 +1532,7 @@
     if (ghRefEl) ghRefEl.value = "main";
     if (ghModeEl) ghModeEl.value = "zip";
     if (ghTokenEl) ghTokenEl.value = "";
+    updatePrivateModeIndicator();
     if (repoOpenAfterAddEl) repoOpenAfterAddEl.checked = true;
     if (repoModalErrorEl) repoModalErrorEl.textContent = "";
     repoAddInFlight = false;
@@ -1547,7 +1565,7 @@
       valid = !!path;
       if (!path) message = "Local path is required.";
     }
-    if (repoModalErrorEl && !repoAddInFlight) repoModalErrorEl.textContent = message;
+    if (repoModalErrorEl && !repoAddInFlight) repoModalErrorEl.textContent = redactSecrets(message);
     if (repoAddBtnEl) repoAddBtnEl.disabled = repoAddInFlight || !valid;
     return valid;
   }
@@ -1591,12 +1609,11 @@
         const repoUrl = String(ghRepoUrlEl && ghRepoUrlEl.value ? ghRepoUrlEl.value : "").trim();
         const ref = String(ghRefEl && ghRefEl.value ? ghRefEl.value : "main").trim() || "main";
         const mode = String(ghModeEl && ghModeEl.value ? ghModeEl.value : "zip").trim() || "zip";
-        const token = String(ghTokenEl && ghTokenEl.value ? ghTokenEl.value : "");
         const displayName = "";
         data = await fetchJson("/api/repo_import/github_add", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ repo_url: repoUrl, ref, mode, token, display_name: displayName, open_after_add: openAfterAdd }),
+          body: JSON.stringify({ repo_url: repoUrl, ref, mode, display_name: displayName, open_after_add: openAfterAdd }),
           signal: repoAddAbortController.signal,
         });
       } else {
@@ -1629,10 +1646,11 @@
         // Keep app usable; repo add already succeeded.
       }
     } catch (e) {
-      if (repoModalErrorEl) repoModalErrorEl.textContent = (e && (e.message || e.error)) || "Failed to add repository.";
-      showToast((e && (e.message || e.error)) || "Failed to add repository.", "error");
+      if (repoModalErrorEl) repoModalErrorEl.textContent = redactSecrets((e && (e.message || e.error)) || "Failed to add repository.");
+      showToast(redactSecrets((e && (e.message || e.error)) || "Failed to add repository."), "error");
     } finally {
       if (ghTokenEl) ghTokenEl.value = "";
+      updatePrivateModeIndicator();
       repoAddInFlight = false;
       repoAddAbortController = null;
       setRepoPanelLoading(false);
@@ -1700,6 +1718,7 @@
     if (repoAddBtnEl) repoAddBtnEl.addEventListener("click", () => runAddRepository());
     if (localRepoPathEl) localRepoPathEl.addEventListener("input", () => validateRepoPanel());
     if (ghRepoUrlEl) ghRepoUrlEl.addEventListener("input", () => validateRepoPanel());
+    if (ghTokenEl) ghTokenEl.addEventListener("input", () => updatePrivateModeIndicator());
   }
 
   function bindGraphControls() {
@@ -1767,7 +1786,7 @@
       }
     } catch (e) {
       fileViewEl.classList.add("muted");
-      fileViewEl.textContent = (e && (e.error || e.message)) || "Failed to load file intelligence";
+      fileViewEl.textContent = redactSecrets((e && (e.error || e.message)) || "Failed to load file intelligence");
     }
   }
 
@@ -1912,7 +1931,7 @@
       }
     } catch (e) {
       symbolViewEl.classList.add("muted");
-      symbolViewEl.textContent = (e && (e.error || e.message)) || "Failed to load symbol intelligence";
+      symbolViewEl.textContent = redactSecrets((e && (e.error || e.message)) || "Failed to load symbol intelligence");
     }
   }
 
@@ -1953,7 +1972,7 @@
       await loadWorkspace();
       await refreshForActiveRepo();
     } catch (e) {
-      metaEl.textContent = (e && (e.message || e.error)) || "Workspace unavailable";
+      metaEl.textContent = redactSecrets((e && (e.message || e.error)) || "Workspace unavailable");
       clearWorkspaceView(metaEl.textContent);
     }
   }

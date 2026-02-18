@@ -6,8 +6,11 @@ import sys
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
+from security_utils import redact_payload, redact_secrets
+
 def print_json(obj) -> None:
-    sys.stdout.write(json.dumps(obj, indent=2))
+    safe_obj = redact_payload(obj)
+    sys.stdout.write(json.dumps(safe_obj, indent=2))
     sys.stdout.write("\n")
 
 MISSING_ANALYSIS_MESSAGE = "Run: python cli.py api analyze --path <repo>"
@@ -112,6 +115,27 @@ def _touch_repo_access_by_dir(repo_dir: Optional[str]) -> None:
         touch_access(compute_repo_hash(repo_dir))
     except Exception:
         pass
+
+
+def _resolve_runtime_github_token(args) -> Tuple[Optional[str], str]:
+    token_arg = str(getattr(args, "token", "") or "").strip()
+    token_stdin = bool(getattr(args, "token_stdin", False))
+    env_token = str(os.getenv("GITHUB_TOKEN", "") or "").strip()
+
+    if token_arg:
+        return token_arg, "arg"
+
+    if token_stdin:
+        try:
+            stdin_token = str(sys.stdin.readline() or "").strip()
+        except Exception:
+            stdin_token = ""
+        if stdin_token:
+            return stdin_token, "stdin"
+
+    if env_token:
+        return env_token, "env"
+    return None, "none"
 
 
 def _save_workspace_registry(data: Dict[str, Any]) -> None:
@@ -1130,7 +1154,6 @@ def api_analyze(args) -> int:
     github_arg = getattr(args, "github", None)
     ref_arg = getattr(args, "ref", None)
     mode_arg = str(getattr(args, "mode", "git") or "git").strip().lower()
-    token_arg = str(getattr(args, "token", "") or "").strip()
     retention_mode = str(getattr(args, "retention", "ttl") or "ttl").strip().lower()
     ttl_days_arg = int(getattr(args, "ttl_days", 14) or 14)
     refresh_flag = bool(getattr(args, "refresh", False))
@@ -1195,19 +1218,12 @@ def api_analyze(args) -> int:
     downloaded = None
     zip_url = None
     token_value: Optional[str] = None
+    private_repo_mode = False
 
     if github_value:
         source = "github"
-        env_token = str(os.getenv("GITHUB_TOKEN", "") or "").strip()
-        if token_arg:
-            token_value = token_arg
-            auth = "arg"
-        elif env_token:
-            token_value = env_token
-            auth = "env"
-        else:
-            token_value = None
-            auth = "none"
+        token_value, auth = _resolve_runtime_github_token(args)
+        private_repo_mode = bool(token_value)
         mode = mode_arg
         if mode_arg == "zip":
             fetch_result = fetch_public_repo_zip(
@@ -1230,7 +1246,7 @@ def api_analyze(args) -> int:
             print_json({
                 "ok": False,
                 "error": err_code or "GITHUB_FETCH_FAILED",
-                "message": fetch_result.get("error", "Failed to fetch GitHub repository"),
+                "message": redact_secrets(fetch_result.get("error", "Failed to fetch GitHub repository"), extra_secrets=[token_value] if token_value else None),
                 "source": source,
                 "mode": mode,
                 "auth": auth,
@@ -1246,6 +1262,7 @@ def api_analyze(args) -> int:
         resolved_ref = fetch_result.get("ref")
         downloaded = fetch_result.get("downloaded")
         zip_url = fetch_result.get("zip_url")
+        token_value = None
     else:
         mode = "filesystem"
         repo_dir_input = path_value or "."
@@ -1387,7 +1404,7 @@ def api_analyze(args) -> int:
         )
         touch_access(repo_hash)
     except Exception as e:
-        print_json({"ok": False, "error": "ANALYZE_FAILED", "message": str(e)})
+        print_json({"ok": False, "error": "ANALYZE_FAILED", "message": redact_secrets(str(e))})
         return 1
 
     print_json({
@@ -1395,6 +1412,7 @@ def api_analyze(args) -> int:
         "source": source,
         "mode": mode,
         "auth": auth,
+        "private_repo_mode": private_repo_mode,
         "cached": not rebuild_required,
         "rebuilt": rebuild_flag,
         "cache_cleared": cache_cleared,
@@ -1571,6 +1589,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_api_analyze.add_argument("--ref", default=None, help="Optional Git branch or tag when using --github")
     p_api_analyze.add_argument("--mode", default="git", choices=["git", "zip"], help="GitHub fetch mode")
     p_api_analyze.add_argument("--token", default=None, help="GitHub personal access token (optional)")
+    p_api_analyze.add_argument("--token-stdin", action="store_true", help="Read GitHub token from stdin")
     p_api_analyze.add_argument("--refresh", action="store_true", help="GitHub only: delete workspace clone and fetch again")
     p_api_analyze.add_argument("--rebuild", action="store_true", help="Force full analysis rebuild even if cache is valid")
     p_api_analyze.add_argument("--clear-cache", action="store_true", help="Delete analysis cache directory before analyze")

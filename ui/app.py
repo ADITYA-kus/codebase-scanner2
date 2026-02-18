@@ -23,6 +23,7 @@ from analysis.utils.cache_manager import (
     set_repo_policy,
     compute_expiration,
 )
+from security_utils import redact_payload, redact_secrets
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -189,13 +190,20 @@ def _repo_entry_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     source = str(payload.get("source", "filesystem") or "filesystem")
     if source not in {"filesystem", "github"}:
         source = "filesystem"
+    repo_url = str(payload.get("repo_url", "") or "").strip()
+    if repo_url:
+        try:
+            from analysis.utils.repo_fetcher import normalize_github_url
+            repo_url = normalize_github_url(repo_url)
+        except Exception:
+            repo_url = redact_secrets(repo_url)
     return {
         "name": str(payload.get("name") or os.path.basename(path.rstrip("\\/")) or path),
         "path": path,
         "repo_hash": repo_hash,
         "last_opened": _now_utc(),
         "source": source,
-        "repo_url": str(payload.get("repo_url", "") or ""),
+        "repo_url": repo_url,
         "ref": str(payload.get("ref", "") or ""),
         "mode": str(payload.get("mode", "") or ""),
     }
@@ -232,6 +240,10 @@ def _upsert_workspace_repo(entry: Dict[str, Any], set_active: bool = True) -> Di
 
 
 def _cli_json(args: List[str], timeout_sec: int = 1800) -> Dict[str, Any]:
+    return _cli_json_with_input(args=args, timeout_sec=timeout_sec, stdin_text=None)
+
+
+def _cli_json_with_input(args: List[str], timeout_sec: int = 1800, stdin_text: Optional[str] = None) -> Dict[str, Any]:
     cmd = [sys.executable, os.path.join(PROJECT_ROOT, "cli.py"), "api"] + list(args)
     try:
         proc = subprocess.run(
@@ -239,16 +251,17 @@ def _cli_json(args: List[str], timeout_sec: int = 1800) -> Dict[str, Any]:
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,
+            input=stdin_text,
             timeout=timeout_sec,
             check=False,
         )
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "CLI_TIMEOUT", "message": "CLI analyze timed out"}
     except Exception as e:
-        return {"ok": False, "error": "CLI_EXEC_FAILED", "message": str(e)}
+        return {"ok": False, "error": "CLI_EXEC_FAILED", "message": redact_secrets(str(e))}
 
-    stdout = (proc.stdout or "").strip()
-    stderr = (proc.stderr or "").strip()
+    stdout = redact_secrets((proc.stdout or "").strip())
+    stderr = redact_secrets((proc.stderr or "").strip())
     payload: Dict[str, Any]
     try:
         payload = json.loads(stdout) if stdout else {"ok": False, "error": "EMPTY_OUTPUT", "message": "CLI returned empty output"}
@@ -268,7 +281,7 @@ def _cli_json(args: List[str], timeout_sec: int = 1800) -> Dict[str, Any]:
             "stdout": stdout[-4000:],
             "stderr": stderr[-4000:],
         }
-    return payload
+    return redact_payload(payload)
 
 
 def _repo_analyze_command(repo: Dict[str, Any]) -> str:
@@ -874,7 +887,10 @@ async def api_repo_import_github_add(request: Request):
     try:
         ws_paths = resolve_workspace_paths(repo_url, ref, mode)
     except Exception as e:
-        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_GITHUB_URL", "message": str(e)})
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "INVALID_GITHUB_URL", "message": redact_secrets(str(e))},
+        )
 
     repo_dir = ws_paths.get("repo_dir", "")
     repo_name = display_name or ws_paths.get("repo_name", "") or os.path.basename(str(repo_dir).rstrip("\\/")) or "github_repo"
@@ -903,6 +919,7 @@ async def api_repo_import_github(request: Request):
     ref = str(payload.get("ref", "") or "").strip() or "main"
     mode = str(payload.get("mode", "") or "zip").strip().lower() or "zip"
     token = str(payload.get("token", "") or "")
+    private_repo_mode = bool(token.strip())
 
     if not repo_url:
         return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_GITHUB_URL"})
@@ -910,15 +927,19 @@ async def api_repo_import_github(request: Request):
         return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_MODE"})
 
     args = ["analyze", "--github", repo_url, "--ref", ref, "--mode", mode]
+    stdin_text = None
     if token.strip():
-        args.extend(["--token", token.strip()])
-    analyze_result = _cli_json(args, timeout_sec=3600)
+        args.append("--token-stdin")
+        stdin_text = token.strip() + "\n"
+    analyze_result = _cli_json_with_input(args, timeout_sec=3600, stdin_text=stdin_text)
+    token = ""
     if not analyze_result.get("ok"):
         return {
             "ok": False,
             "error": analyze_result.get("error", "ANALYZE_FAILED"),
-            "message": analyze_result.get("message", "GitHub analyze failed"),
+            "message": redact_secrets(analyze_result.get("message", "GitHub analyze failed")),
             "analyze_result": analyze_result,
+            "private_repo_mode": private_repo_mode,
         }
 
     repo_dir = str(analyze_result.get("repo_dir", "") or "").strip()
@@ -941,7 +962,13 @@ async def api_repo_import_github(request: Request):
     _ensure_ui_state(ctx)
     SEARCH_INDEX_CACHE.pop(ctx["repo_hash"], None)
     GRAPH_INDEX_CACHE.pop(ctx["repo_hash"], None)
-    return {"ok": True, "repo_hash": entry["repo_hash"], "repo": entry, "analyze_result": analyze_result}
+    return {
+        "ok": True,
+        "repo_hash": entry["repo_hash"],
+        "repo": entry,
+        "analyze_result": analyze_result,
+        "private_repo_mode": private_repo_mode,
+    }
 
 
 @app.post("/api/repo_analyze")
@@ -1545,6 +1572,6 @@ def api_impact(
     except Exception as e:
         return JSONResponse(
             status_code=500,
-            content={"ok": False, "error": "IMPACT_FAILED", "message": str(e)},
+            content={"ok": False, "error": "IMPACT_FAILED", "message": redact_secrets(str(e))},
         )
     return payload

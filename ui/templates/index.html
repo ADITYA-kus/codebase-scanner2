@@ -51,6 +51,9 @@
       <label>Token (optional for private repos)
         <input id="gh-token" type="password" placeholder="Used for this run only" />
       </label>
+      <div id="private-mode-indicator" class="private-mode hidden" title="Token used only in memory; not stored; you can clear cached analysis anytime.">
+        🔒 Private Repo Mode: Tokens are used only in memory; nothing is uploaded; you can delete cached data anytime.
+      </div>
     </div>
     <label class="path">
       <input id="repo-open-after-add" type="checkbox" checked />

@@ -81,3 +81,22 @@ F) Non-Functional (important)
  No network calls
 
  Does not crash on syntax errors (later improvement, Phase-5/6)
+
+G) Private Repo Support & Security
+
+ Safe token input options:
+ `--token <value>`, `GITHUB_TOKEN`, and `--token-stdin`.
+
+ Token handling guarantees:
+ Tokens are used in-memory only for a single request.
+ Tokens are never persisted to `.codemap_cache`, `workspaces.json`, logs, or CLI JSON output.
+
+ Redaction:
+ All CLI/backend/UI error paths apply secret redaction for:
+ GitHub token formats, Authorization headers, and credentialed URLs.
+
+ Recommended usage:
+ Prefer environment variable or stdin for private repos:
+ `set GITHUB_TOKEN=...`
+ or
+ `echo <token> | python cli.py api analyze --github <url> --ref <ref> --mode git --token-stdin`
