@@ -507,6 +507,14 @@ body {
   margin-bottom: 10px;
 }
 
+.privacy-confirm {
+  margin: 8px 0 10px;
+  border: 1px solid #f2d7bf;
+  border-radius: 8px;
+  background: #fff9f2;
+  padding: 8px;
+}
+
 .privacy-warning {
   border: 1px solid #f2d7bf;
   border-radius: 8px;

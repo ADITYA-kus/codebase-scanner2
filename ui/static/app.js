@@ -50,13 +50,15 @@
   const toastEl = document.getElementById("toast");
   const privacySummaryEl = document.getElementById("privacy-summary");
   const privacyExpiringEl = document.getElementById("privacy-expiring");
+  const privacyPrivateBannerEl = document.getElementById("privacy-private-banner");
   const privacyResultEl = document.getElementById("privacy-result");
-  const policyDefaultTtlEl = document.getElementById("policy-default-ttl");
-  const policyWorkspaceTtlEl = document.getElementById("policy-workspace-ttl");
-  const policySaveBtnEl = document.getElementById("policy-save-btn");
+  const privacyConfirmEl = document.getElementById("privacy-confirm");
+  const repoRetentionSelectEl = document.getElementById("repo-retention-select");
+  const repoRetentionSaveBtnEl = document.getElementById("repo-retention-save-btn");
   const cleanupDryBtnEl = document.getElementById("cleanup-dry-btn");
   const cleanupNowBtnEl = document.getElementById("cleanup-now-btn");
   const deleteRepoCacheBtnEl = document.getElementById("delete-repo-cache-btn");
+  const deleteAllCachesBtnEl = document.getElementById("delete-all-caches-btn");
   const autoCleanOnRemoveEl = document.getElementById("auto-clean-on-remove");
 
   const fileCache = new Map();
@@ -1023,10 +1025,10 @@
     if (!repoHash) return;
     if (!window.confirm(`Delete analysis data for repo hash ${repoHash}?`)) return;
     try {
-      await fetchJson("/api/data_privacy/delete_analysis", {
+      await fetchJson("/api/cache/clear", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo_hash: repoHash, dry_run: false, yes: true }),
+        body: JSON.stringify({ repo_hash: repoHash, dry_run: false }),
       });
       await loadRepoRegistry();
       await loadDataPrivacy();
@@ -1042,10 +1044,10 @@
     if (!repoHash) return;
     if (!window.confirm("This will permanently remove analysis data and cloned/downloaded source.")) return;
     try {
-      await fetchJson("/api/data_privacy/delete_repo", {
+      await fetchJson("/api/cache/clear", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo_hash: repoHash, dry_run: false, yes: true }),
+        body: JSON.stringify({ repo_hash: repoHash, dry_run: false }),
       });
       await loadWorkspace();
       await refreshForActiveRepo();
@@ -1065,10 +1067,10 @@
         body: JSON.stringify({ repo_hash: repoHash }),
       });
       if (autoCleanOnRemove) {
-        await fetchJson("/api/data_privacy/delete_analysis", {
+        await fetchJson("/api/cache/clear", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ repo_hash: repoHash, dry_run: false, yes: true }),
+          body: JSON.stringify({ repo_hash: repoHash, dry_run: false }),
         });
       }
       await loadWorkspace();
@@ -1079,11 +1081,15 @@
   }
 
   async function setRepoPolicy(repoHash, policyValue) {
+    let days = 30;
+    if (policyValue === "never") days = 0;
+    if (policyValue === "24h") days = 1;
+    if (policyValue === "7d") days = 7;
     try {
-      await fetchJson("/api/data_privacy/repo_policy", {
+      await fetchJson("/api/cache/retention", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo_hash: repoHash, policy: policyValue }),
+        body: JSON.stringify({ repo_hash: repoHash, days }),
       });
       await loadRepoRegistry();
       await loadDataPrivacy();
@@ -1096,24 +1102,41 @@
     if (!privacySummaryEl) return;
     privacySummaryEl.textContent = "Loading data retention...";
     privacyExpiringEl.innerHTML = "";
+    if (privacyConfirmEl) {
+      privacyConfirmEl.classList.add("hidden");
+      privacyConfirmEl.innerHTML = "";
+    }
     try {
-      const data = await fetchJson("/api/data_privacy");
+      const data = await fetchJson("/api/cache/list");
       dataPrivacyCache = data;
-      const policy = data.policy || {};
-      if (policyDefaultTtlEl) policyDefaultTtlEl.value = String(policy.default_ttl_days ?? 30);
-      if (policyWorkspaceTtlEl) policyWorkspaceTtlEl.value = String(policy.workspaces_ttl_days ?? 7);
+      const caches = Array.isArray(data.caches) ? data.caches : [];
+      const totalSize = caches.reduce((acc, c) => acc + Number(c.size_bytes || 0), 0);
+      const oldest = caches.length ? caches.slice().sort((a, b) => String(a.last_updated || "").localeCompare(String(b.last_updated || "")))[0] : null;
+      const largest = caches.length ? caches.slice().sort((a, b) => Number(b.size_bytes || 0) - Number(a.size_bytes || 0))[0] : null;
+      privacySummaryEl.textContent = `Repos cached: ${caches.length} | Total size: ${formatBytes(totalSize)}${oldest ? ` | Oldest: ${oldest.repo_path || oldest.repo_hash}` : ""}${largest ? ` | Largest: ${formatBytes(largest.size_bytes || 0)}` : ""}`;
 
-      const oldest = data.oldest_repo ? ` | Oldest: ${String(data.oldest_repo.repo_path || data.oldest_repo.repo_hash || "")}` : "";
-      const largest = data.largest_repo ? ` | Largest: ${formatBytes(data.largest_repo.size_bytes || 0)}` : "";
-      privacySummaryEl.textContent = `Repos cached: ${data.repo_count || 0} | Total size: ${formatBytes(data.total_cache_size_bytes || 0)} | Last cleanup: ${data.last_cleanup_iso || "never"}${oldest}${largest}`;
+      const activeRepo = currentRepoEntry();
+      if (activeRepo && repoRetentionSelectEl) {
+        const activeCache = caches.find((c) => String(c.repo_hash) === String(activeRepo.repo_hash));
+        const ttl = Number(activeCache && activeCache.retention ? activeCache.retention.ttl_days : 14);
+        repoRetentionSelectEl.value = String(Number.isFinite(ttl) ? ttl : 14);
+      }
 
-      const expiring = Array.isArray(data.expiring_soon) ? data.expiring_soon : [];
+      const activePrivate = !!(activeRepo && activeRepo.private_mode);
+      if (privacyPrivateBannerEl) {
+        privacyPrivateBannerEl.classList.toggle("hidden", !activePrivate);
+      }
+
+      const expiring = caches.filter((c) => {
+        const days = Number(c && c.retention ? c.retention.days_left : NaN);
+        return c && c.retention && c.retention.mode !== "pinned" && Number.isFinite(days) && days <= 3;
+      });
       if (expiring.length) {
         privacyExpiringEl.innerHTML = expiring
           .slice(0, 5)
           .map((x) => {
             const target = String(x.repo_path || x.repo_hash || "repo");
-            const days = Number(x.days_left);
+            const days = Number(x.retention ? x.retention.days_left : NaN);
             const label = Number.isFinite(days) ? `${Math.max(0, days).toFixed(1)} days` : "soon";
             return `<div class="privacy-warning">This repo cache will be auto-deleted in ${esc(label)}: ${esc(target)}</div>`;
           })
@@ -1128,52 +1151,114 @@
     }
   }
 
-  async function saveRetentionPolicy() {
-    const defaultTtl = Number(policyDefaultTtlEl && policyDefaultTtlEl.value ? policyDefaultTtlEl.value : 30);
-    const workspaceTtl = Number(policyWorkspaceTtlEl && policyWorkspaceTtlEl.value ? policyWorkspaceTtlEl.value : 7);
-    if (!Number.isFinite(defaultTtl) || defaultTtl < 0 || !Number.isFinite(workspaceTtl) || workspaceTtl < 0) {
-      if (privacyResultEl) privacyResultEl.textContent = "Enter valid non-negative TTL values.";
-      return;
-    }
-    try {
-      const data = await fetchJson("/api/data_privacy/policy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          default_ttl_days: Math.floor(defaultTtl),
-          workspaces_ttl_days: Math.floor(workspaceTtl),
-        }),
+  function showPrivacyConfirm(message, onConfirm) {
+    if (!privacyConfirmEl) return;
+    privacyConfirmEl.classList.remove("hidden");
+    privacyConfirmEl.innerHTML = `
+      <div class="privacy-warning">${esc(message)}</div>
+      <div class="repo-row-actions">
+        <button id="privacy-confirm-yes" class="repo-btn danger" type="button">Confirm</button>
+        <button id="privacy-confirm-no" class="repo-btn" type="button">Cancel</button>
+      </div>
+    `;
+    const yesBtn = document.getElementById("privacy-confirm-yes");
+    const noBtn = document.getElementById("privacy-confirm-no");
+    if (yesBtn) {
+      yesBtn.addEventListener("click", async () => {
+        privacyConfirmEl.classList.add("hidden");
+        privacyConfirmEl.innerHTML = "";
+        await onConfirm();
       });
-      if (privacyResultEl) privacyResultEl.textContent = `Policy saved: cache ${data.policy.default_ttl_days}d, workspaces ${data.policy.workspaces_ttl_days}d`;
-      await loadDataPrivacy();
-    } catch (e) {
-      if (privacyResultEl) privacyResultEl.textContent = redactSecrets((e && (e.message || e.error)) || "Policy update failed.");
+    }
+    if (noBtn) {
+      noBtn.addEventListener("click", () => {
+        privacyConfirmEl.classList.add("hidden");
+        privacyConfirmEl.innerHTML = "";
+      });
     }
   }
 
-  async function runRetentionCleanup(dryRun) {
+  async function setActiveRepoRetention() {
+    const repo = currentRepoEntry();
+    if (!repo) {
+      if (privacyResultEl) privacyResultEl.textContent = "No active repo selected.";
+      return;
+    }
+    const days = Number(repoRetentionSelectEl && repoRetentionSelectEl.value ? repoRetentionSelectEl.value : 14);
+    if (!Number.isFinite(days) || days < 0) {
+      if (privacyResultEl) privacyResultEl.textContent = "Select a valid retention value.";
+      return;
+    }
     try {
-      if (!dryRun) {
-        const ok = window.confirm("Run cleanup now? This deletes expired cache/workspace data.");
-        if (!ok) return;
+      const data = await fetchJson("/api/cache/retention", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          repo_hash: repo.repo_hash,
+          days: Math.floor(days),
+        }),
+      });
+      if (privacyResultEl) {
+        const ttl = Number(data.days);
+        privacyResultEl.textContent = `Retention updated: ${repo.name || repo.repo_hash} -> ${ttl === 0 ? "Never" : `${ttl} days`}`;
       }
-      const data = await fetchJson("/api/data_privacy/cleanup", {
+      await loadDataPrivacy();
+      await loadRepoRegistry();
+    } catch (e) {
+      if (privacyResultEl) privacyResultEl.textContent = redactSecrets((e && (e.message || e.error)) || "Retention update failed.");
+    }
+  }
+
+  async function runRetentionCleanup(dryRun, confirmAfterPreview) {
+    try {
+      const data = await fetchJson("/api/cache/sweep", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           dry_run: !!dryRun,
-          yes: !dryRun,
-          apply: !dryRun,
         }),
       });
+      if (!dryRun) {
+        if (privacyResultEl) {
+          privacyResultEl.textContent = `Cleanup executed: removed ${(data.caches_removed || []).length} caches, freed ~${formatBytes(data.freed_bytes_estimate || 0)}.`;
+        }
+        await loadDataPrivacy();
+        await loadWorkspace();
+        return;
+      }
+      const count = (data.would_delete || []).length;
       if (privacyResultEl) {
-        privacyResultEl.textContent = `caches_removed=${(data.caches_removed || []).length}, workspaces_removed=${(data.workspaces_removed || []).length}, freed~${formatBytes(data.freed_bytes_estimate || 0)}`;
+        privacyResultEl.textContent = `Dry run: ${count} path(s) would be deleted, freed ~${formatBytes(data.freed_bytes_estimate || 0)}.`;
+      }
+      if (confirmAfterPreview) {
+        showPrivacyConfirm(`Proceed with cleanup of ${count} path(s)?`, async () => {
+          await runRetentionCleanup(false, false);
+        });
       }
       await loadDataPrivacy();
-      await loadWorkspace();
     } catch (e) {
       if (privacyResultEl) privacyResultEl.textContent = redactSecrets((e && (e.message || e.error)) || "Cleanup failed.");
     }
+  }
+
+  async function deleteAllCaches() {
+    showPrivacyConfirm("Delete ALL caches and related workspaces?", async () => {
+      try {
+        const data = await fetchJson("/api/cache/clear", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ all: true, dry_run: false }),
+        });
+        if (privacyResultEl) {
+          privacyResultEl.textContent = `Deleted all caches. Freed ~${formatBytes(data.freed_bytes_estimate || 0)}.`;
+        }
+        await loadWorkspace();
+        await refreshForActiveRepo();
+        await loadDataPrivacy();
+      } catch (e) {
+        if (privacyResultEl) privacyResultEl.textContent = redactSecrets((e && (e.message || e.error)) || "Delete all failed.");
+      }
+    });
   }
 
   async function deleteActiveRepoCache() {
@@ -1181,21 +1266,25 @@
       if (privacyResultEl) privacyResultEl.textContent = "No active repo selected.";
       return;
     }
-    const ok = window.confirm(`Delete cached data for repo hash ${activeRepoHash}?`);
-    if (!ok) return;
-    try {
-      const data = await fetchJson("/api/data_privacy/delete_repo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo_hash: activeRepoHash, dry_run: false, yes: true }),
-      });
-      if (privacyResultEl) privacyResultEl.textContent = `Deleted cache for ${data.repo_hash}. Freed~${formatBytes(data.freed_bytes_estimate || 0)}`;
-      await loadWorkspace();
-      await refreshForActiveRepo();
-      await loadDataPrivacy();
-    } catch (e) {
-      if (privacyResultEl) privacyResultEl.textContent = redactSecrets((e && (e.message || e.error)) || "Delete failed.");
-    }
+    showPrivacyConfirm(`Delete cached data for repo ${activeRepoHash}?`, async () => {
+      try {
+        const data = await fetchJson("/api/cache/clear", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo_hash: activeRepoHash, dry_run: false }),
+        });
+        if (privacyResultEl) {
+          privacyResultEl.textContent = `Deleted cache for ${data.repo_hash}. Freed~${formatBytes(data.freed_bytes_estimate || 0)}`;
+        }
+        fileCache.clear();
+        symbolCache.clear();
+        await loadWorkspace();
+        await refreshForActiveRepo();
+        await loadDataPrivacy();
+      } catch (e) {
+        if (privacyResultEl) privacyResultEl.textContent = redactSecrets((e && (e.message || e.error)) || "Delete failed.");
+      }
+    });
   }
 
   function renderTreeNode(node, parentEl) {
@@ -1674,24 +1763,29 @@
         }
       });
     }
-    if (policySaveBtnEl) {
-      policySaveBtnEl.addEventListener("click", () => {
-        saveRetentionPolicy();
+    if (repoRetentionSaveBtnEl) {
+      repoRetentionSaveBtnEl.addEventListener("click", () => {
+        setActiveRepoRetention();
       });
     }
     if (cleanupDryBtnEl) {
       cleanupDryBtnEl.addEventListener("click", () => {
-        runRetentionCleanup(true);
+        runRetentionCleanup(true, false);
       });
     }
     if (cleanupNowBtnEl) {
       cleanupNowBtnEl.addEventListener("click", () => {
-        runRetentionCleanup(false);
+        runRetentionCleanup(true, true);
       });
     }
     if (deleteRepoCacheBtnEl) {
       deleteRepoCacheBtnEl.addEventListener("click", () => {
         deleteActiveRepoCache();
+      });
+    }
+    if (deleteAllCachesBtnEl) {
+      deleteAllCachesBtnEl.addEventListener("click", () => {
+        deleteAllCaches();
       });
     }
   }

@@ -16,12 +16,8 @@ from fastapi.templating import Jinja2Templates
 from analysis.utils.cache_manager import (
     compute_repo_hash,
     get_cache_dir,
-    load_policy as load_retention_policy,
-    save_policy as save_retention_policy,
-    cleanup as cleanup_retention_data,
-    delete_repo as delete_repo_cache,
-    set_repo_policy,
-    compute_expiration,
+    list_caches as cm_list_caches,
+    touch_last_accessed,
 )
 from security_utils import redact_payload, redact_secrets
 
@@ -138,28 +134,28 @@ def _cache_manifest(cache_dir: str) -> Dict[str, Any]:
 
 
 def _list_cache_status() -> List[Dict[str, Any]]:
-    policy = load_retention_policy()
     items: List[Dict[str, Any]] = []
-    if not os.path.isdir(GLOBAL_CACHE_DIR):
-        return items
-    for name in sorted(os.listdir(GLOBAL_CACHE_DIR)):
-        if name in {"workspaces", "workspaces.json", "retention.json"}:
-            continue
-        cache_dir = os.path.join(GLOBAL_CACHE_DIR, name)
-        if not os.path.isdir(cache_dir):
-            continue
-        manifest = _cache_manifest(cache_dir)
-        manifest.setdefault("repo_hash", name)
-        exp = compute_expiration(manifest, policy)
-        repo_path = manifest.get("repo_path") if isinstance(manifest.get("repo_path"), str) else ""
+    for cache in cm_list_caches():
+        exp = cache.get("expires", {}) if isinstance(cache.get("expires"), dict) else {}
         items.append(
             {
-                "repo_hash": name,
-                "repo_path": repo_path,
-                "cache_dir": cache_dir,
-                "size_bytes": _cache_dir_size(cache_dir),
-                "last_updated": manifest.get("updated_at"),
-                "retention": exp,
+                "repo_hash": cache.get("repo_hash"),
+                "repo_path": cache.get("repo_path", ""),
+                "repo_url": cache.get("repo_url", ""),
+                "source": cache.get("source", "filesystem"),
+                "cache_dir": cache.get("cache_dir"),
+                "workspace_dir": cache.get("workspace_dir", ""),
+                "size_bytes": int(cache.get("size_bytes", 0)),
+                "last_updated": cache.get("last_accessed_at"),
+                "analysis_version": cache.get("analysis_version"),
+                "private_mode": bool(cache.get("private_mode", False)),
+                "retention": {
+                    "mode": exp.get("mode", "ttl"),
+                    "ttl_days": int(cache.get("retention_days", 14) or 14),
+                    "days_left": exp.get("days_left"),
+                    "expired": bool(exp.get("expired", False)),
+                },
+                "has": cache.get("has", {}),
             }
         )
     return items
@@ -313,6 +309,10 @@ def _active_repo_ctx() -> Optional[Dict[str, str]]:
     if not active:
         return None
     ctx = _repo_ctx_from_dir(active["path"])
+    try:
+        touch_last_accessed(ctx["repo_hash"])
+    except Exception:
+        pass
     _ensure_ui_state(ctx)
     return ctx
 
@@ -320,12 +320,26 @@ def _active_repo_ctx() -> Optional[Dict[str, str]]:
 def _repo_ctx(repo: Optional[str]) -> Dict[str, str]:
     # Backward-compatible helper retained for older internal call sites.
     if repo:
-        return _repo_ctx_from_dir(repo)
+        ctx = _repo_ctx_from_dir(repo)
+        try:
+            touch_last_accessed(ctx["repo_hash"])
+        except Exception:
+            pass
+        return ctx
     active = _active_repo_ctx()
     if active:
+        try:
+            touch_last_accessed(active["repo_hash"])
+        except Exception:
+            pass
         return active
     repo_dir = _resolve_repo_dir(repo)
-    return _repo_ctx_from_dir(repo_dir)
+    ctx = _repo_ctx_from_dir(repo_dir)
+    try:
+        touch_last_accessed(ctx["repo_hash"])
+    except Exception:
+        pass
+    return ctx
 
 
 def _has_analysis_cache(ctx: Dict[str, str]) -> bool:
@@ -373,8 +387,8 @@ def _load_repo_data(ctx: Dict[str, str]) -> Dict[str, Any]:
 
 def _repo_registry_data() -> List[Dict[str, Any]]:
     ws = _ensure_default_workspace()
-    policy = load_retention_policy()
     repos = ws.get("repos", []) if isinstance(ws, dict) else []
+    status_by_hash = {str(s.get("repo_hash", "")): s for s in _list_cache_status()}
     items: List[Dict[str, Any]] = []
     seen = set()
 
@@ -386,52 +400,51 @@ def _repo_registry_data() -> List[Dict[str, Any]]:
         if not repo_hash:
             continue
         seen.add(repo_hash)
-        cache_dir = get_cache_dir(entry["path"])
-        explain_path = os.path.join(cache_dir, "explain.json")
-        resolved_path = os.path.join(cache_dir, "resolved_calls.json")
-        has_analysis = os.path.exists(explain_path) and os.path.exists(resolved_path)
-        manifest = _cache_manifest(cache_dir)
-        manifest.setdefault("repo_hash", repo_hash)
-        expiry = compute_expiration(manifest, policy)
+        status = status_by_hash.get(repo_hash, {})
+        has_map = status.get("has", {}) if isinstance(status.get("has"), dict) else {}
+        has_analysis = bool(has_map.get("explain") and has_map.get("resolved_calls"))
         items.append(
             {
                 "repo_hash": repo_hash,
                 "name": entry.get("name", ""),
                 "source": entry.get("source", "filesystem"),
                 "repo_path": entry.get("path", ""),
-                "repo_url": entry.get("repo_url", ""),
-                "ref": entry.get("ref", ""),
+                "repo_url": entry.get("repo_url", "") or status.get("repo_url", ""),
+                "ref": entry.get("ref", "") or status.get("ref", ""),
                 "mode": entry.get("mode", ""),
-                "cache_dir": cache_dir,
-                "has_analysis": bool(has_analysis),
-                "last_updated": manifest.get("updated_at"),
-                "size_bytes": _cache_dir_size(cache_dir),
-                "retention": expiry,
+                "cache_dir": status.get("cache_dir") or get_cache_dir(entry["path"]),
+                "workspace_dir": status.get("workspace_dir", ""),
+                "has_analysis": has_analysis,
+                "last_updated": status.get("last_updated"),
+                "size_bytes": int(status.get("size_bytes", 0)),
+                "retention": status.get("retention", {}),
+                "private_mode": bool(status.get("private_mode", False)),
                 "analyze_command": _repo_analyze_command(entry),
             }
         )
 
-    # Include cache-only repos not yet in workspace list.
-    for status in _list_cache_status():
-        repo_hash = str(status.get("repo_hash", "") or "")
+    for repo_hash, status in status_by_hash.items():
         if not repo_hash or repo_hash in seen:
             continue
         repo_path = str(status.get("repo_path", "") or "")
-        source = "github" if (os.sep + ".codemap_cache" + os.sep + "workspaces" + os.sep) in repo_path else "filesystem"
+        source = str(status.get("source", "filesystem") or "filesystem")
+        has_map = status.get("has", {}) if isinstance(status.get("has"), dict) else {}
         items.append(
             {
                 "repo_hash": repo_hash,
                 "name": os.path.basename(repo_path.rstrip("\\/")) or repo_hash,
                 "source": source,
                 "repo_path": repo_path,
-                "repo_url": "",
-                "ref": "",
-                "mode": "zip" if source == "github" else "",
+                "repo_url": status.get("repo_url", ""),
+                "ref": status.get("ref", ""),
+                "mode": "",
                 "cache_dir": status.get("cache_dir"),
-                "has_analysis": os.path.exists(os.path.join(status.get("cache_dir", ""), "explain.json")),
+                "workspace_dir": status.get("workspace_dir", ""),
+                "has_analysis": bool(has_map.get("explain") and has_map.get("resolved_calls")),
                 "last_updated": status.get("last_updated"),
                 "size_bytes": int(status.get("size_bytes", 0)),
                 "retention": status.get("retention", {}),
+                "private_mode": bool(status.get("private_mode", False)),
                 "analyze_command": f"python cli.py api analyze --path {repo_path}",
             }
         )
@@ -648,10 +661,81 @@ def api_repo_registry():
     }
 
 
+@app.get("/api/cache/list")
+def api_cache_list():
+    return _cli_json(["cache", "list"])
+
+
+@app.post("/api/cache/clear")
+async def api_cache_clear(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    args: List[str] = ["cache", "clear"]
+    dry_run = bool(payload.get("dry_run", False))
+
+    if bool(payload.get("all", False)):
+        args.append("--all")
+    elif payload.get("repo_hash"):
+        args.extend(["--repo-hash", str(payload.get("repo_hash"))])
+    elif payload.get("path"):
+        args.extend(["--path", str(payload.get("path"))])
+    elif payload.get("github"):
+        args.extend(["--github", str(payload.get("github"))])
+        if payload.get("ref"):
+            args.extend(["--ref", str(payload.get("ref"))])
+        if payload.get("mode"):
+            args.extend(["--mode", str(payload.get("mode"))])
+    else:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_TARGET"})
+
+    if dry_run:
+        args.append("--dry-run")
+    else:
+        args.append("--yes")
+    return _cli_json(args)
+
+
+@app.post("/api/cache/retention")
+async def api_cache_retention(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    days = payload.get("days")
+    if days is None:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_DAYS"})
+    args: List[str] = ["cache", "retention", "--days", str(days), "--yes"]
+
+    if payload.get("repo_hash"):
+        args.extend(["--repo-hash", str(payload.get("repo_hash"))])
+    elif payload.get("path"):
+        args.extend(["--path", str(payload.get("path"))])
+    elif payload.get("github"):
+        args.extend(["--github", str(payload.get("github"))])
+        if payload.get("ref"):
+            args.extend(["--ref", str(payload.get("ref"))])
+        if payload.get("mode"):
+            args.extend(["--mode", str(payload.get("mode"))])
+    else:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_TARGET"})
+    return _cli_json(args)
+
+
+@app.post("/api/cache/sweep")
+async def api_cache_sweep(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    dry_run = bool(payload.get("dry_run", False))
+    args: List[str] = ["cache", "sweep"]
+    if dry_run:
+        args.append("--dry-run")
+    else:
+        args.append("--yes")
+    return _cli_json(args)
+
+
 @app.get("/api/data_privacy")
 def api_data_privacy():
-    policy = load_retention_policy()
-    caches = _list_cache_status()
+    cache_payload = _cli_json(["cache", "list"])
+    caches = cache_payload.get("caches", []) if isinstance(cache_payload, dict) else []
     total_size = sum(int(c.get("size_bytes", 0)) for c in caches)
     expiring = [
         c for c in caches
@@ -662,14 +746,15 @@ def api_data_privacy():
     oldest_repo = None
     largest_repo = None
     if caches:
-        oldest_repo = sorted(caches, key=lambda x: str(x.get("last_updated", "") or ""))[0]
+        oldest_repo = sorted(caches, key=lambda x: str(x.get("last_updated", "") or x.get("retention", {}).get("last_accessed_at", "")))[0]
         largest_repo = sorted(caches, key=lambda x: int(x.get("size_bytes", 0)), reverse=True)[0]
+    policy = {"default_ttl_days": 14, "workspaces_ttl_days": 7, "last_cleanup_iso": ""}
     return {
         "ok": True,
         "policy": policy,
         "repo_count": len(caches),
         "total_cache_size_bytes": int(total_size),
-        "last_cleanup_iso": policy.get("last_cleanup_iso", ""),
+        "last_cleanup_iso": "",
         "oldest_repo": {
             "repo_hash": oldest_repo.get("repo_hash"),
             "repo_path": oldest_repo.get("repo_path"),
@@ -696,26 +781,14 @@ def api_data_privacy():
 async def api_data_privacy_policy(request: Request):
     body = await request.json()
     payload = body if isinstance(body, dict) else {}
-    current = load_retention_policy()
-    default_ttl = payload.get("default_ttl_days", current.get("default_ttl_days", 30))
-    workspace_ttl = payload.get("workspaces_ttl_days", current.get("workspaces_ttl_days", 7))
-    try:
-        default_ttl = int(default_ttl)
-        workspace_ttl = int(workspace_ttl)
-    except Exception:
-        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_POLICY"})
-    if default_ttl < 0 or workspace_ttl < 0:
-        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_POLICY"})
-    updated = save_retention_policy(
-        {
-            "default_ttl_days": default_ttl,
-            "workspaces_ttl_days": workspace_ttl,
-            "never_delete_repo_hashes": current.get("never_delete_repo_hashes", []),
-            "repo_policies": current.get("repo_policies", {}),
-            "last_cleanup_iso": current.get("last_cleanup_iso", ""),
-        }
-    )
-    return {"ok": True, "policy": updated}
+    return {
+        "ok": True,
+        "policy": {
+            "default_ttl_days": int(payload.get("default_ttl_days", 14) or 14),
+            "workspaces_ttl_days": int(payload.get("workspaces_ttl_days", 7) or 7),
+        },
+        "message": "Global policy updates are handled by per-repo retention controls.",
+    }
 
 
 @app.post("/api/data_privacy/cleanup")
@@ -733,8 +806,12 @@ async def api_data_privacy_cleanup(request: Request):
             status_code=400,
             content={"ok": False, "error": "CONFIRM_REQUIRED", "message": "Set yes=true to run cleanup."},
         )
-    result = cleanup_retention_data(dry_run=dry_run)
-    return result
+    args = ["cache", "sweep"]
+    if dry_run:
+        args.append("--dry-run")
+    else:
+        args.append("--yes")
+    return _cli_json(args)
 
 
 @app.post("/api/data_privacy/delete_repo")
@@ -751,8 +828,12 @@ async def api_data_privacy_delete_repo(request: Request):
             status_code=400,
             content={"ok": False, "error": "CONFIRM_REQUIRED", "message": "Set yes=true to delete."},
         )
-    result = delete_repo_cache(repo_hash=repo_hash, dry_run=dry_run)
-    return result
+    args = ["cache", "clear", "--repo-hash", repo_hash]
+    if dry_run:
+        args.append("--dry-run")
+    else:
+        args.append("--yes")
+    return _cli_json(args)
 
 
 @app.post("/api/data_privacy/delete_analysis")
@@ -769,8 +850,12 @@ async def api_data_privacy_delete_analysis(request: Request):
             status_code=400,
             content={"ok": False, "error": "CONFIRM_REQUIRED", "message": "Set yes=true to delete."},
         )
-    result = delete_repo_cache(repo_hash=repo_hash, dry_run=dry_run, remove_workspace_registry=False)
-    return result
+    args = ["cache", "clear", "--repo-hash", repo_hash]
+    if dry_run:
+        args.append("--dry-run")
+    else:
+        args.append("--yes")
+    return _cli_json(args)
 
 
 @app.post("/api/data_privacy/repo_policy")
@@ -783,22 +868,16 @@ async def api_data_privacy_repo_policy(request: Request):
         return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_REPO_HASH"})
 
     if policy_value == "never":
-        mode = "pinned"
         ttl_days = 0
     elif policy_value == "24h":
-        mode = "ttl"
         ttl_days = 1
     elif policy_value == "7d":
-        mode = "ttl"
         ttl_days = 7
     elif policy_value == "30d":
-        mode = "ttl"
         ttl_days = 30
     else:
         return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_POLICY"})
-
-    policy = set_repo_policy(repo_hash=repo_hash, mode=mode, ttl_days=ttl_days)
-    return {"ok": True, "repo_hash": repo_hash, "policy": policy}
+    return _cli_json(["cache", "retention", "--repo-hash", repo_hash, "--days", str(ttl_days), "--yes"])
 
 
 @app.post("/api/workspace/add")
