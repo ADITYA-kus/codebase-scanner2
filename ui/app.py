@@ -202,19 +202,12 @@ def _repo_entry_from_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "repo_url": repo_url,
         "ref": str(payload.get("ref", "") or ""),
         "mode": str(payload.get("mode", "") or ""),
+        "private_mode": bool(payload.get("private_mode", False)),
     }
 
 
 def _ensure_default_workspace() -> Dict[str, Any]:
-    ws = _load_workspaces()
-    if ws.get("repos"):
-        return ws
-    default_dir = _resolve_repo_dir(DEFAULT_REPO)
-    if os.path.isdir(default_dir):
-        entry = _repo_entry(default_dir)
-        ws = {"active_repo_hash": entry["repo_hash"], "repos": [entry]}
-        _save_workspaces(ws)
-    return ws
+    return _load_workspaces()
 
 
 def _upsert_workspace_repo(entry: Dict[str, Any], set_active: bool = True) -> Dict[str, Any]:
@@ -297,10 +290,6 @@ def _get_active_repo_entry() -> Optional[Dict[str, str]]:
     for repo in repos:
         if repo.get("repo_hash") == active_hash:
             return repo
-    if repos:
-        ws["active_repo_hash"] = repos[0].get("repo_hash", "")
-        _save_workspaces(ws)
-        return repos[0]
     return None
 
 
@@ -418,7 +407,7 @@ def _repo_registry_data() -> List[Dict[str, Any]]:
                 "last_updated": status.get("last_updated"),
                 "size_bytes": int(status.get("size_bytes", 0)),
                 "retention": status.get("retention", {}),
-                "private_mode": bool(status.get("private_mode", False)),
+                "private_mode": bool(status.get("private_mode", False) or entry.get("private_mode", False)),
                 "analyze_command": _repo_analyze_command(entry),
             }
         )
@@ -956,6 +945,7 @@ async def api_repo_import_github_add(request: Request):
     mode = str(payload.get("mode", "") or "zip").strip().lower() or "zip"
     display_name = str(payload.get("display_name", "") or "").strip()
     open_after_add = bool(payload.get("open_after_add", False))
+    private_mode = bool(payload.get("private_mode", False))
     # token is intentionally ignored here; it is never persisted.
 
     if not repo_url:
@@ -981,6 +971,7 @@ async def api_repo_import_github_add(request: Request):
             "repo_url": ws_paths.get("normalized_url", repo_url),
             "ref": ref,
             "mode": mode,
+            "private_mode": private_mode,
         }
     )
     ws_before = _load_workspaces()
@@ -1034,6 +1025,7 @@ async def api_repo_import_github(request: Request):
             "repo_url": str(analyze_result.get("repo_url", repo_url) or repo_url),
             "ref": str(analyze_result.get("ref", ref) or ref),
             "mode": str(analyze_result.get("mode", mode) or mode),
+            "private_mode": private_repo_mode,
         }
     )
     _upsert_workspace_repo(entry, set_active=True)
@@ -1055,6 +1047,8 @@ async def api_repo_analyze(request: Request):
     body = await request.json()
     payload = body if isinstance(body, dict) else {}
     repo_hash = str(payload.get("repo_hash", "") or "").strip()
+    token = str(payload.get("token", "") or "")
+    private_mode_hint = bool(payload.get("private_mode", False)) or bool(token.strip())
     if not repo_hash:
         return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_REPO_HASH"})
 
@@ -1072,13 +1066,26 @@ async def api_repo_analyze(request: Request):
         mode = str(entry.get("mode", "") or "zip")
         if not repo_url:
             return JSONResponse(status_code=400, content={"ok": False, "error": "MISSING_GITHUB_METADATA"})
-        result = _cli_json(["analyze", "--github", repo_url, "--ref", ref, "--mode", mode], timeout_sec=3600)
+        args = ["analyze", "--github", repo_url, "--ref", ref, "--mode", mode]
+        stdin_text = None
+        if token.strip():
+            args.append("--token-stdin")
+            stdin_text = token.strip() + "\n"
+        result = _cli_json_with_input(args=args, timeout_sec=3600, stdin_text=stdin_text)
+        token = ""
     else:
         result = _cli_json(["analyze", "--path", entry["path"]], timeout_sec=3600)
 
     if result.get("ok"):
+        if private_mode_hint:
+            entry["private_mode"] = True
         _upsert_workspace_repo(entry, set_active=True)
-    return {"ok": bool(result.get("ok")), "repo_hash": repo_hash, "analyze_result": result}
+    return {
+        "ok": bool(result.get("ok")),
+        "repo_hash": repo_hash,
+        "analyze_result": result,
+        "private_repo_mode": bool(entry.get("private_mode", False) or private_mode_hint),
+    }
 
 
 @app.post("/api/workspace/select")

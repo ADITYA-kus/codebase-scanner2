@@ -114,6 +114,12 @@ body {
   gap: 2px;
 }
 
+.repo-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .repo-name {
   font-size: 20px;
   font-weight: 700;
@@ -320,7 +326,7 @@ body {
 }
 
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .muted {
@@ -377,6 +383,12 @@ body {
   border-color: #cbe6d2;
 }
 
+.repo-badge.private {
+  background: #eef5ff;
+  color: #1f4a85;
+  border-color: #c7daff;
+}
+
 .repo-badge.not-analyzed {
   background: #fff5ef;
   color: #8a4e14;
@@ -412,6 +424,30 @@ body {
   color: #5b3a12;
   padding: 10px 11px;
   margin-bottom: 10px;
+}
+
+.missing-analysis-token {
+  margin-top: 4px;
+  width: 100%;
+  border: 1px solid #d9c8b4;
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: #fff;
+}
+
+.analysis-run-status {
+  margin-top: 6px;
+}
+
+.analysis-run-error {
+  margin-top: 6px;
+  padding: 7px 9px;
+  border: 1px solid #e9b4b4;
+  border-radius: 7px;
+  background: #fff2f2;
+  color: #8f2f2f;
+  font-size: 12px;
 }
 
 .modal-tabs {
@@ -477,6 +513,33 @@ body {
   background: #8f2f2f;
 }
 
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.28);
+  z-index: 1200;
+  pointer-events: auto;
+}
+
+.confirm-card {
+  width: min(460px, calc(100vw - 32px));
+  background: #fff;
+  border: 1px solid #d8dee8;
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
+  padding: 14px;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1201;
+}
+
+body.modal-open {
+  overflow: hidden;
+}
+
 .privacy-controls {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -523,6 +586,19 @@ body {
   padding: 7px 9px;
   font-size: 12px;
   margin-bottom: 6px;
+}
+
+.expires-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #f0c89f;
+  background: #fff3e4;
+  color: #8a4e14;
+  font-size: 10px;
+  padding: 2px 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .graph-card {

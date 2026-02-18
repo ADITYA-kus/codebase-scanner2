@@ -1,6 +1,7 @@
 ﻿(function () {
   const metaEl = document.getElementById("meta");
   const repoNameEl = document.getElementById("repo-name");
+  const repoPrivateBadgeEl = document.getElementById("repo-private-badge");
   const repoSelectEl = document.getElementById("repo-select");
   const addRepoBtnEl = document.getElementById("add-repo-btn");
   const treeStatusEl = document.getElementById("tree-status");
@@ -42,6 +43,7 @@
   const ghRefEl = document.getElementById("gh-ref");
   const ghModeEl = document.getElementById("gh-mode");
   const ghTokenEl = document.getElementById("gh-token");
+  const ghPrivateModeEl = document.getElementById("gh-private-mode");
   const privateModeIndicatorEl = document.getElementById("private-mode-indicator");
   const repoOpenAfterAddEl = document.getElementById("repo-open-after-add");
   const repoModalErrorEl = document.getElementById("repo-modal-error");
@@ -60,6 +62,12 @@
   const deleteRepoCacheBtnEl = document.getElementById("delete-repo-cache-btn");
   const deleteAllCachesBtnEl = document.getElementById("delete-all-caches-btn");
   const autoCleanOnRemoveEl = document.getElementById("auto-clean-on-remove");
+  const autoCleanNoteEl = document.getElementById("auto-clean-note");
+  const confirmModalEl = document.getElementById("confirm-modal");
+  const confirmTitleEl = document.getElementById("confirm-title");
+  const confirmMessageEl = document.getElementById("confirm-message");
+  const confirmYesEl = document.getElementById("confirm-yes");
+  const confirmNoEl = document.getElementById("confirm-no");
 
   const fileCache = new Map();
   const symbolCache = new Map();
@@ -165,6 +173,25 @@
     return (repoRegistry || []).find((r) => String(r.repo_hash) === String(activeRepoHash)) || null;
   }
 
+  function selectedRepoEntry() {
+    const fromWorkspace = (workspaceRepos || []).find((r) => String(r.repo_hash) === String(activeRepoHash));
+    if (fromWorkspace) return fromWorkspace;
+    return currentRepoEntry();
+  }
+
+  function syncRepoHeader(fallbackName) {
+    const entry = selectedRepoEntry();
+    const displayName = String((entry && entry.name) || fallbackName || "").trim();
+    repoName = displayName;
+    if (repoNameEl) {
+      repoNameEl.textContent = displayName || "No repo selected";
+    }
+    if (repoPrivateBadgeEl) {
+      const privateMode = !!(entry && entry.private_mode);
+      repoPrivateBadgeEl.classList.toggle("hidden", !privateMode);
+    }
+  }
+
   function analyzeCommandForRepo(repo) {
     const r = repo || currentRepoEntry();
     if (!r) return "python cli.py api analyze --path <repo>";
@@ -176,16 +203,35 @@
     return `python cli.py api analyze --path ${r.repo_path || "<repo>"}`;
   }
 
+  function analysisErrorMessage(errPayload) {
+    const payload = (errPayload && errPayload.analyze_result) ? errPayload.analyze_result : (errPayload || {});
+    const code = String(payload.error || (errPayload && errPayload.error) || "");
+    if (code === "GITHUB_AUTH_REQUIRED") {
+      return "Private repo detected. Please provide a GitHub token and run analysis again.";
+    }
+    return redactSecrets(String(payload.message || payload.error || (errPayload && errPayload.message) || (errPayload && errPayload.error) || "Analyze failed"));
+  }
+
   function renderMissingAnalysisCta(msg) {
+    const repo = currentRepoEntry();
     const cmd = analyzeCommandForRepo();
+    const isGithub = String((repo && repo.source) || "filesystem") === "github";
     return `
       <div class="missing-analysis-cta">
         <div class="symbol-name">Analysis not found</div>
         <div>No analysis data found for this repo. Click "Run Analysis Now" or run:</div>
-        <div class="impact-command">${esc(cmd)}</div>
+        <div class="impact-command analysis-cli-command">${esc(cmd)}</div>
+        ${isGithub ? `
+          <label class="path">GitHub token (optional for private repos)
+            <input class="missing-analysis-token" type="password" placeholder="Used for this run only" />
+          </label>
+        ` : ""}
         <div class="repo-row-actions">
-          <button id="run-analysis-now-btn" class="repo-btn small" type="button">Run Analysis Now</button>
+          <button class="repo-btn small run-analysis-now-btn" type="button">Run Analysis Now</button>
+          <button class="repo-btn small copy-analysis-cli-btn" type="button">Copy CLI command</button>
         </div>
+        <div class="analysis-run-status path hidden"></div>
+        <div class="analysis-run-error hidden"></div>
         <div class="path">${esc(msg || "After it finishes, refresh this page.")}</div>
       </div>
     `;
@@ -224,12 +270,74 @@
     renderRecents();
   }
 
+  function setMissingAnalysisCtaState(state) {
+    const loading = !!(state && state.loading);
+    const status = String((state && state.status) || "").trim();
+    const error = String((state && state.error) || "").trim();
+
+    document.querySelectorAll(".run-analysis-now-btn").forEach((btn) => {
+      btn.disabled = loading;
+      btn.classList.toggle("is-loading", loading);
+      btn.textContent = loading ? "Analyzing..." : "Run Analysis Now";
+    });
+    document.querySelectorAll(".copy-analysis-cli-btn").forEach((btn) => {
+      btn.disabled = loading;
+    });
+    document.querySelectorAll(".analysis-run-status").forEach((el) => {
+      el.textContent = status;
+      el.classList.toggle("hidden", !status);
+    });
+    document.querySelectorAll(".analysis-run-error").forEach((el) => {
+      el.textContent = error;
+      el.classList.toggle("hidden", !error);
+    });
+  }
+
   function bindRunAnalysisNowButton() {
-    const btn = document.getElementById("run-analysis-now-btn");
-    if (!btn) return;
-    btn.addEventListener("click", async () => {
-      if (!activeRepoHash) return;
-      await analyzeRepoByHash(activeRepoHash);
+    document.querySelectorAll(".run-analysis-now-btn").forEach((btn) => {
+      if (btn.dataset.bound === "1") return;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", async () => {
+        if (!activeRepoHash) return;
+        const container = btn.closest(".missing-analysis-cta");
+        const tokenInput = container ? container.querySelector(".missing-analysis-token") : null;
+        const token = tokenInput ? String(tokenInput.value || "").trim() : "";
+        setMissingAnalysisCtaState({ loading: true, status: "Analyzing..." });
+        const activeRepo = currentRepoEntry();
+        const result = await analyzeRepoByHash(activeRepoHash, {
+          token,
+          showErrors: false,
+          privateModeHint: !!(activeRepo && activeRepo.private_mode),
+        });
+        if (tokenInput) tokenInput.value = "";
+        if (ghTokenEl) ghTokenEl.value = "";
+        updatePrivateModeIndicator();
+        if (!result || !result.ok) {
+          const err = analysisErrorMessage(result ? result.error : {});
+          setMissingAnalysisCtaState({ loading: false, status: "", error: err });
+          showToast(err, "error");
+          return;
+        }
+        showToast("Analysis completed.", "success");
+        setMissingAnalysisCtaState({ loading: false, status: "", error: "" });
+      });
+    });
+
+    document.querySelectorAll(".copy-analysis-cli-btn").forEach((btn) => {
+      if (btn.dataset.bound === "1") return;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", async () => {
+        const container = btn.closest(".missing-analysis-cta");
+        const cmdEl = container ? container.querySelector(".analysis-cli-command") : null;
+        const command = String((cmdEl && cmdEl.textContent) || analyzeCommandForRepo()).trim();
+        if (!command) return;
+        try {
+          await navigator.clipboard.writeText(command);
+          showToast("CLI command copied.", "success");
+        } catch (_e) {
+          showToast("Failed to copy command.", "error");
+        }
+      });
     });
   }
 
@@ -704,14 +812,8 @@
       const errCode = String((e && e.error) || "");
       if (errCode === "MISSING_ANALYSIS" || errCode === "CACHE_NOT_FOUND") {
         impactViewEl.classList.remove("muted");
-        impactViewEl.innerHTML = `
-          <div class="card arch-missing impact-empty-state">
-            <div class="impact-empty-title">Analysis not found</div>
-            <div>This repository hasn't been analyzed yet. Run analysis first.</div>
-            <pre class="impact-command">python cli.py api analyze --path &lt;repo&gt;</pre>
-            <div class="path">After it finishes, refresh this page.</div>
-          </div>
-        `;
+        impactViewEl.innerHTML = renderMissingAnalysisCta("After it finishes, impact will load automatically.");
+        bindRunAnalysisNowButton();
         return;
       }
       impactViewEl.classList.add("muted");
@@ -745,6 +847,13 @@
       }
       renderGraphData(data);
     } catch (e) {
+      const errCode = String((e && e.error) || "");
+      if (errCode === "MISSING_ANALYSIS" || errCode === "CACHE_NOT_FOUND") {
+        graphViewEl.classList.remove("muted");
+        graphViewEl.innerHTML = renderMissingAnalysisCta("After it finishes, graph will load automatically.");
+        bindRunAnalysisNowButton();
+        return;
+      }
       graphViewEl.classList.add("muted");
       graphViewEl.textContent = redactSecrets((e && (e.error || e.message)) || "Graph unavailable.");
     }
@@ -829,9 +938,13 @@
 
   function renderWorkspaceSelect() {
     if (!repoSelectEl) return;
-    repoSelectEl.innerHTML = workspaceRepos
+    const placeholder = !activeRepoHash
+      ? '<option value="" selected>Select repo...</option>'
+      : "";
+    repoSelectEl.innerHTML = placeholder + workspaceRepos
       .map((r) => `<option value="${esc(r.repo_hash)}" ${r.repo_hash === activeRepoHash ? "selected" : ""}>${esc(r.name)}</option>`)
       .join("");
+    syncRepoHeader();
   }
 
   async function loadWorkspace() {
@@ -839,6 +952,7 @@
     workspaceRepos = ws.repos || [];
     activeRepoHash = ws.active_repo_hash || "";
     renderWorkspaceSelect();
+    syncRepoHeader();
     await loadRepoRegistry();
     await loadDataPrivacy();
   }
@@ -869,6 +983,7 @@
       }
     }
     activeRepoHash = repoHash;
+    syncRepoHeader();
     await refreshForActiveRepo();
   }
 
@@ -901,10 +1016,17 @@
     const r = (repo && repo.retention) || {};
     const mode = String(r.mode || "ttl");
     const ttl = Number(r.ttl_days || 30);
-    if (mode === "pinned") return "never";
+    if (mode === "pinned" || ttl <= 0) return "never";
     if (ttl <= 1) return "24h";
     if (ttl <= 7) return "7d";
-    return "30d";
+    if (ttl <= 14) return "14d";
+    if (ttl <= 30) return "30d";
+    return "90d";
+  }
+
+  function isExpiringSoon(repo) {
+    const daysLeft = Number(repo && repo.retention ? repo.retention.days_left : NaN);
+    return Number.isFinite(daysLeft) && daysLeft >= 0 && daysLeft < 2;
   }
 
   function renderRepoRegistry() {
@@ -917,8 +1039,11 @@
     repoListContentEl.innerHTML = rows.map((r) => `
       <div class="repo-row" data-repo-hash="${esc(r.repo_hash)}">
         <div class="repo-row-header">
-          <div class="repo-row-name">${esc(r.name || r.repo_hash)}</div>
-          ${repoBadge(r)}
+          <div class="repo-row-name">${esc(r.name || r.repo_hash)} ${r.private_mode ? "<span class='repo-badge private'>PRIVATE MODE</span>" : ""}</div>
+          <div class="repo-row-actions">
+            ${repoBadge(r)}
+            ${isExpiringSoon(r) ? "<span class='expires-chip'>Expires soon</span>" : ""}
+          </div>
         </div>
         <div class="path">${esc(r.source === "github" ? (r.repo_url || r.repo_path || "") : (r.repo_path || ""))}</div>
         <div class="path">Source: ${esc(sourceLabel(r))}</div>
@@ -927,19 +1052,22 @@
         ${r.source === "github" ? `<div class="path">Workspace: ${esc(r.repo_path || "")}</div>` : ""}
         <div class="repo-row-actions">
           <select class="repo-policy-select" data-repo-hash="${esc(r.repo_hash)}">
-            <option value="never" ${repoPolicyValue(r) === "never" ? "selected" : ""}>Never auto-delete</option>
-            <option value="24h" ${repoPolicyValue(r) === "24h" ? "selected" : ""}>Delete after 24 hours</option>
+            <option value="1d" ${repoPolicyValue(r) === "24h" ? "selected" : ""}>Delete after 1 day</option>
             <option value="7d" ${repoPolicyValue(r) === "7d" ? "selected" : ""}>Delete after 7 days</option>
+            <option value="14d" ${repoPolicyValue(r) === "14d" ? "selected" : ""}>Delete after 14 days</option>
             <option value="30d" ${repoPolicyValue(r) === "30d" ? "selected" : ""}>Delete after 30 days</option>
+            <option value="90d" ${repoPolicyValue(r) === "90d" ? "selected" : ""}>Delete after 90 days</option>
+            <option value="never" ${repoPolicyValue(r) === "never" ? "selected" : ""}>Never auto-delete</option>
           </select>
           <button class="repo-btn small repo-policy-save-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Set Auto-Delete Policy</button>
         </div>
         <div class="repo-row-actions">
           <button class="repo-btn small repo-open-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Open</button>
           <button class="repo-btn small repo-analyze-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">${r.has_analysis ? "Re-analyze" : "Analyze"}</button>
-          <button class="repo-btn small danger repo-clear-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Delete Analysis Data</button>
+          <button class="repo-btn small danger repo-clear-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Delete analysis data</button>
+          ${isExpiringSoon(r) ? `<button class="repo-btn small danger repo-delete-now-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Delete now</button>` : ""}
           <button class="repo-btn small danger repo-delete-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Delete Repo Completely</button>
-          <button class="repo-btn small repo-remove-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Remove from list</button>
+          <button class="repo-btn small repo-remove-btn" type="button" data-repo-hash="${esc(r.repo_hash)}">Remove Repo from list</button>
         </div>
       </div>
     `).join("");
@@ -959,6 +1087,13 @@
       });
     });
     repoListContentEl.querySelectorAll(".repo-clear-btn").forEach((el) => {
+      el.addEventListener("click", async () => {
+        const repoHash = el.getAttribute("data-repo-hash");
+        if (!repoHash) return;
+        await clearRepoByHash(repoHash);
+      });
+    });
+    repoListContentEl.querySelectorAll(".repo-delete-now-btn").forEach((el) => {
       el.addEventListener("click", async () => {
         const repoHash = el.getAttribute("data-repo-hash");
         if (!repoHash) return;
@@ -1001,91 +1136,136 @@
     }
   }
 
-  async function analyzeRepoByHash(repoHash) {
-    if (!repoHash) return;
+  async function maybeApplyPrivateDefaultRetention(repoHash, shouldApply) {
+    if (!repoHash || !shouldApply) return;
+    try {
+      await fetchJson("/api/cache/retention", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_hash: repoHash, days: 7 }),
+      });
+    } catch (_e) {
+      // Best-effort; analysis result should not fail if retention update fails.
+    }
+  }
+
+  async function analyzeRepoByHash(repoHash, options) {
+    if (!repoHash) return { ok: false, error: { message: "INVALID_REPO_HASH" } };
+    const opts = options || {};
+    const token = String(opts.token || "").trim();
+    const showErrors = opts.showErrors !== false;
+    const repoBefore = (repoRegistry || []).find((r) => String(r.repo_hash) === String(repoHash));
+    const shouldApplyPrivateDefault = !!(
+      opts.privateModeHint
+      || token
+      || (repoBefore && repoBefore.private_mode && !repoBefore.has_analysis)
+    );
     try {
       const data = await fetchJson("/api/repo_analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo_hash: repoHash }),
+        body: JSON.stringify({ repo_hash: repoHash, token, private_mode: !!opts.privateModeHint }),
       });
-      if (!data.ok) {
-        window.alert((data.analyze_result && (data.analyze_result.message || data.analyze_result.error)) || "Analyze failed");
-      }
+      await maybeApplyPrivateDefaultRetention(repoHash, shouldApplyPrivateDefault);
       await loadWorkspace();
       if (repoHash) {
         await selectWorkspace(repoHash);
       }
+      return { ok: true, data };
     } catch (e) {
-      window.alert(redactSecrets((e && (e.message || e.error)) || "Analyze failed"));
+      const message = analysisErrorMessage(e || {});
+      if (showErrors) {
+        window.alert(message);
+      }
+      return { ok: false, error: e, message };
     }
   }
 
   async function clearRepoByHash(repoHash) {
     if (!repoHash) return;
-    if (!window.confirm(`Delete analysis data for repo hash ${repoHash}?`)) return;
-    try {
-      await fetchJson("/api/cache/clear", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo_hash: repoHash, dry_run: false }),
-      });
-      await loadRepoRegistry();
-      await loadDataPrivacy();
-      if (String(activeRepoHash) === String(repoHash)) {
-        await refreshForActiveRepo();
-      }
-    } catch (e) {
-      window.alert(redactSecrets((e && (e.message || e.error)) || "Delete analysis data failed"));
-    }
-  }
-
-  async function deleteRepoByHash(repoHash) {
-    if (!repoHash) return;
-    if (!window.confirm("This will permanently remove analysis data and cloned/downloaded source.")) return;
-    try {
-      await fetchJson("/api/cache/clear", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo_hash: repoHash, dry_run: false }),
-      });
-      await loadWorkspace();
-      await refreshForActiveRepo();
-      await loadDataPrivacy();
-    } catch (e) {
-      window.alert(redactSecrets((e && (e.message || e.error)) || "Delete failed"));
-    }
-  }
-
-  async function removeRepoFromList(repoHash) {
-    if (!repoHash) return;
-    if (!window.confirm(`Remove repo ${repoHash} from UI list?`)) return;
-    try {
-      await fetchJson("/api/workspace/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo_hash: repoHash }),
-      });
-      if (autoCleanOnRemove) {
+    await openConfirmModal({
+      title: "Delete analysis data",
+      message: `This will remove cache artifacts for ${repoHash}.`,
+      confirmText: "Yes",
+      cancelText: "Cancel",
+      actionType: "delete_analysis",
+      payload: { repo_hash: repoHash },
+      onConfirm: async () => {
         await fetchJson("/api/cache/clear", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ repo_hash: repoHash, dry_run: false }),
         });
-      }
-      await loadWorkspace();
-      await refreshForActiveRepo();
-    } catch (e) {
-      window.alert(redactSecrets((e && (e.message || e.error)) || "Remove failed"));
-    }
+        await loadRepoRegistry();
+        await loadDataPrivacy();
+        if (String(activeRepoHash) === String(repoHash)) {
+          await refreshForActiveRepo();
+        }
+      },
+    });
+  }
+
+  async function deleteRepoByHash(repoHash) {
+    if (!repoHash) return;
+    await openConfirmModal({
+      title: "Delete repo completely",
+      message: "This will permanently remove analysis data and cloned/downloaded source.",
+      confirmText: "Yes",
+      cancelText: "Cancel",
+      actionType: "delete_repo_completely",
+      payload: { repo_hash: repoHash },
+      onConfirm: async () => {
+        await fetchJson("/api/cache/clear", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo_hash: repoHash, dry_run: false }),
+        });
+        await loadWorkspace();
+        await refreshForActiveRepo();
+        await loadDataPrivacy();
+      },
+    });
+  }
+
+  async function removeRepoFromList(repoHash) {
+    if (!repoHash) return;
+    const msg = autoCleanOnRemove
+      ? `Remove repo ${repoHash} from UI list and delete its local cache?`
+      : `Remove repo ${repoHash} from UI list only?`;
+    await openConfirmModal({
+      title: "Remove repo from list",
+      message: msg,
+      confirmText: "Yes",
+      cancelText: "Cancel",
+      actionType: "remove_repo_from_list",
+      payload: { repo_hash: repoHash, auto_clean: !!autoCleanOnRemove },
+      onConfirm: async () => {
+        await fetchJson("/api/workspace/remove", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo_hash: repoHash }),
+        });
+        if (autoCleanOnRemove) {
+          await fetchJson("/api/cache/clear", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ repo_hash: repoHash, dry_run: false }),
+          });
+        }
+        await loadWorkspace();
+        await refreshForActiveRepo();
+      },
+    });
   }
 
   async function setRepoPolicy(repoHash, policyValue) {
     let days = 30;
     if (policyValue === "never") days = 0;
-    if (policyValue === "24h") days = 1;
+    if (policyValue === "24h" || policyValue === "1d") days = 1;
     if (policyValue === "7d") days = 7;
+    if (policyValue === "14d") days = 14;
     try {
+      if (policyValue === "90d") days = 90;
       await fetchJson("/api/cache/retention", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1111,15 +1291,26 @@
       dataPrivacyCache = data;
       const caches = Array.isArray(data.caches) ? data.caches : [];
       const totalSize = caches.reduce((acc, c) => acc + Number(c.size_bytes || 0), 0);
-      const oldest = caches.length ? caches.slice().sort((a, b) => String(a.last_updated || "").localeCompare(String(b.last_updated || "")))[0] : null;
-      const largest = caches.length ? caches.slice().sort((a, b) => Number(b.size_bytes || 0) - Number(a.size_bytes || 0))[0] : null;
-      privacySummaryEl.textContent = `Repos cached: ${caches.length} | Total size: ${formatBytes(totalSize)}${oldest ? ` | Oldest: ${oldest.repo_path || oldest.repo_hash}` : ""}${largest ? ` | Largest: ${formatBytes(largest.size_bytes || 0)}` : ""}`;
-
       const activeRepo = currentRepoEntry();
+      const activeCache = activeRepo ? caches.find((c) => String(c.repo_hash) === String(activeRepo.repo_hash)) : null;
+      const retentionMode = String(activeCache && activeCache.retention ? activeCache.retention.mode : "ttl");
+      const ttlDays = Number(activeCache && activeCache.retention ? activeCache.retention.ttl_days : 14);
+      const retentionLabel = (retentionMode === "pinned" || ttlDays <= 0) ? "Never" : `${Math.max(1, Math.floor(ttlDays))} days`;
+      const lastAnalyzed = String((activeCache && activeCache.last_updated) || "never");
+      const autoDeleteOn = !((retentionMode === "pinned") || ttlDays <= 0);
+      privacySummaryEl.textContent = `Stored locally in .codemap_cache | Retention: ${retentionLabel} | Last analyzed: ${lastAnalyzed} | Auto-delete policy: ${autoDeleteOn ? "ON" : "OFF"}`;
+      if (privacyResultEl) {
+        privacyResultEl.textContent = `Repos cached: ${caches.length} | Total size: ${formatBytes(totalSize)}`;
+      }
+
       if (activeRepo && repoRetentionSelectEl) {
-        const activeCache = caches.find((c) => String(c.repo_hash) === String(activeRepo.repo_hash));
         const ttl = Number(activeCache && activeCache.retention ? activeCache.retention.ttl_days : 14);
-        repoRetentionSelectEl.value = String(Number.isFinite(ttl) ? ttl : 14);
+        if (!Number.isFinite(ttl) || ttl <= 0) repoRetentionSelectEl.value = "0";
+        else if (ttl <= 1) repoRetentionSelectEl.value = "1";
+        else if (ttl <= 7) repoRetentionSelectEl.value = "7";
+        else if (ttl <= 14) repoRetentionSelectEl.value = "14";
+        else if (ttl <= 30) repoRetentionSelectEl.value = "30";
+        else repoRetentionSelectEl.value = "90";
       }
 
       const activePrivate = !!(activeRepo && activeRepo.private_mode);
@@ -1314,14 +1505,14 @@
     try {
       const meta = await fetchJson("/api/meta");
       repoDir = meta.repo_dir || "";
-      repoName = String(repoDir || "").replace(/\\/g, "/").split("/").filter(Boolean).pop() || "repo";
-      if (repoNameEl) repoNameEl.textContent = repoName;
+      const fallbackName = String(repoDir || "").replace(/\\/g, "/").split("/").filter(Boolean).pop() || "";
+      syncRepoHeader(fallbackName);
       const counts = meta.counts || {};
       metaEl.textContent = `${meta.repo_hash} | symbols ${counts.symbols || 0} | calls ${counts.resolved_calls || 0}`;
       return true;
     } catch (e) {
       const msg = redactSecrets((e && (e.message || e.error)) || "Metadata unavailable");
-      if (repoNameEl) repoNameEl.textContent = "No repo";
+      syncRepoHeader();
       metaEl.textContent = msg;
       recentSymbols = [];
       recentFiles = [];
@@ -1588,6 +1779,17 @@
   let repoInlineBound = false;
   let repoAddInFlight = false;
   let repoAddAbortController = null;
+  const DEBUG_CONFIRM = false;
+  if (!window.confirmState || typeof window.confirmState !== "object") {
+    window.confirmState = { open: false, actionType: null, payload: null };
+  }
+  let confirmResolve = null;
+  let confirmRunAction = null;
+  let confirmKeydownHandler = null;
+  let confirmBackdropHandler = null;
+  let confirmPanelHandler = null;
+  let confirmYesHandler = null;
+  let confirmNoHandler = null;
 
   function showToast(message, type) {
     if (!toastEl) return;
@@ -1599,10 +1801,141 @@
     }, 2200);
   }
 
+  function confirmLog(label, payload) {
+    if (!DEBUG_CONFIRM) return;
+    try {
+      console.log(`[confirm] ${label}`, payload || {});
+    } catch (_e) {
+      // no-op
+    }
+  }
+
+  function teardownConfirmModalHandlers() {
+    if (!confirmModalEl) return;
+    const panel = confirmModalEl.querySelector(".confirm-card");
+    const yesBtn = confirmModalEl.querySelector("#confirm-yes");
+    const noBtn = confirmModalEl.querySelector("#confirm-no");
+    if (confirmBackdropHandler) {
+      confirmModalEl.removeEventListener("click", confirmBackdropHandler);
+      confirmBackdropHandler = null;
+    }
+    if (panel && confirmPanelHandler) {
+      panel.removeEventListener("click", confirmPanelHandler);
+      confirmPanelHandler = null;
+    }
+    if (yesBtn && confirmYesHandler) {
+      yesBtn.removeEventListener("click", confirmYesHandler);
+      confirmYesHandler = null;
+    }
+    if (noBtn && confirmNoHandler) {
+      noBtn.removeEventListener("click", confirmNoHandler);
+      confirmNoHandler = null;
+    }
+    if (confirmKeydownHandler) {
+      document.removeEventListener("keydown", confirmKeydownHandler);
+      confirmKeydownHandler = null;
+    }
+  }
+
+  function renderConfirmModal(title, message) {
+    if (!confirmModalEl || !confirmTitleEl || !confirmMessageEl) return;
+    confirmTitleEl.textContent = String(title || "Confirm action");
+    confirmMessageEl.textContent = redactSecrets(String(message || ""));
+    const open = !!(window.confirmState && window.confirmState.open);
+    confirmModalEl.classList.toggle("hidden", !open);
+    document.body.classList.toggle("modal-open", open);
+  }
+
+  function closeConfirmModal(result) {
+    confirmLog("close", { result });
+    if (!confirmModalEl) return;
+    teardownConfirmModalHandlers();
+    window.confirmState = { open: false, actionType: null, payload: null };
+    confirmRunAction = null;
+    renderConfirmModal("", "");
+    const resolver = confirmResolve;
+    confirmResolve = null;
+    if (typeof resolver === "function") resolver(!!result);
+  }
+
+  function openConfirmModal({ title, message, confirmText, cancelText, actionType, payload, onConfirm }) {
+    if (!confirmModalEl) {
+      return Promise.resolve(window.confirm(String(message || "Are you sure?")));
+    }
+    window.confirmState = {
+      open: true,
+      actionType: actionType || null,
+      payload: payload || null,
+    };
+    confirmRunAction = typeof onConfirm === "function" ? onConfirm : null;
+    renderConfirmModal(title, message);
+    teardownConfirmModalHandlers();
+
+    const panel = confirmModalEl.querySelector(".confirm-card");
+    const yesBtn = confirmModalEl.querySelector("#confirm-yes");
+    const noBtn = confirmModalEl.querySelector("#confirm-no");
+    if (yesBtn) yesBtn.textContent = String(confirmText || "Yes");
+    if (noBtn) noBtn.textContent = String(cancelText || "Cancel");
+
+    confirmNoHandler = () => {
+      confirmLog("cancel", { actionType: window.confirmState.actionType });
+      closeConfirmModal(false);
+    };
+    confirmYesHandler = async () => {
+      confirmLog("yes", { actionType: window.confirmState.actionType });
+      let ok = true;
+      try {
+        if (confirmRunAction) {
+          await confirmRunAction();
+        }
+      } catch (e) {
+        ok = false;
+        showToast(redactSecrets((e && (e.message || e.error)) || "Action failed"), "error");
+      } finally {
+        closeConfirmModal(ok);
+      }
+    };
+    confirmBackdropHandler = (e) => {
+      if (e.target === confirmModalEl) {
+        confirmLog("backdrop", { actionType: window.confirmState.actionType });
+        closeConfirmModal(false);
+      }
+    };
+    confirmPanelHandler = (e) => {
+      e.stopPropagation();
+    };
+    confirmKeydownHandler = (e) => {
+      if (e.key === "Escape" && window.confirmState.open) {
+        confirmLog("escape", { actionType: window.confirmState.actionType });
+        closeConfirmModal(false);
+      }
+    };
+
+    if (noBtn) noBtn.addEventListener("click", confirmNoHandler);
+    if (yesBtn) yesBtn.addEventListener("click", confirmYesHandler);
+    confirmModalEl.addEventListener("click", confirmBackdropHandler);
+    if (panel) panel.addEventListener("click", confirmPanelHandler);
+    document.addEventListener("keydown", confirmKeydownHandler);
+
+    confirmLog("open", {
+      actionType: window.confirmState.actionType,
+      payload: window.confirmState.payload || {},
+    });
+
+    return new Promise((resolve) => {
+      // Replace any pending unresolved confirm with a safe cancel.
+      if (typeof confirmResolve === "function") {
+        try { confirmResolve(false); } catch (_e) {}
+      }
+      confirmResolve = resolve;
+    });
+  }
+
   function updatePrivateModeIndicator() {
     if (!privateModeIndicatorEl) return;
     const hasToken = !!(ghTokenEl && String(ghTokenEl.value || "").trim());
-    privateModeIndicatorEl.classList.toggle("hidden", !hasToken);
+    const checked = !!(ghPrivateModeEl && ghPrivateModeEl.checked);
+    privateModeIndicatorEl.classList.toggle("hidden", !(hasToken || checked));
   }
 
   function setRepoPanelTab(tab) {
@@ -1621,6 +1954,7 @@
     if (ghRefEl) ghRefEl.value = "main";
     if (ghModeEl) ghModeEl.value = "zip";
     if (ghTokenEl) ghTokenEl.value = "";
+    if (ghPrivateModeEl) ghPrivateModeEl.checked = false;
     updatePrivateModeIndicator();
     if (repoOpenAfterAddEl) repoOpenAfterAddEl.checked = true;
     if (repoModalErrorEl) repoModalErrorEl.textContent = "";
@@ -1694,15 +2028,25 @@
 
     try {
       let data;
+      let privateModeRequested = false;
       if (githubActive) {
         const repoUrl = String(ghRepoUrlEl && ghRepoUrlEl.value ? ghRepoUrlEl.value : "").trim();
         const ref = String(ghRefEl && ghRefEl.value ? ghRefEl.value : "main").trim() || "main";
         const mode = String(ghModeEl && ghModeEl.value ? ghModeEl.value : "zip").trim() || "zip";
+        const token = String(ghTokenEl && ghTokenEl.value ? ghTokenEl.value : "").trim();
+        privateModeRequested = !!(token || (ghPrivateModeEl && ghPrivateModeEl.checked));
         const displayName = "";
         data = await fetchJson("/api/repo_import/github_add", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ repo_url: repoUrl, ref, mode, display_name: displayName, open_after_add: openAfterAdd }),
+          body: JSON.stringify({
+            repo_url: repoUrl,
+            ref,
+            mode,
+            display_name: displayName,
+            open_after_add: openAfterAdd,
+            private_mode: privateModeRequested,
+          }),
           signal: repoAddAbortController.signal,
         });
       } else {
@@ -1731,6 +2075,9 @@
         } else if (wasActiveRepo && data.repo_hash !== wasActiveRepo) {
           await selectWorkspace(wasActiveRepo);
         }
+        if (data.repo_hash && privateModeRequested) {
+          showToast("Private mode enabled. Default retention set to 7 days after analysis.", "success");
+        }
       } catch (_postSuccessErr) {
         // Keep app usable; repo add already succeeded.
       }
@@ -1754,8 +2101,10 @@
     }
     if (autoCleanOnRemoveEl) {
       autoCleanOnRemoveEl.checked = !!autoCleanOnRemove;
+      if (autoCleanNoteEl) autoCleanNoteEl.classList.toggle("hidden", !autoCleanOnRemove);
       autoCleanOnRemoveEl.addEventListener("change", () => {
         autoCleanOnRemove = !!autoCleanOnRemoveEl.checked;
+        if (autoCleanNoteEl) autoCleanNoteEl.classList.toggle("hidden", !autoCleanOnRemove);
         try {
           window.localStorage.setItem("codemap_auto_clean_on_remove", autoCleanOnRemove ? "1" : "0");
         } catch (_e) {
@@ -1813,6 +2162,7 @@
     if (localRepoPathEl) localRepoPathEl.addEventListener("input", () => validateRepoPanel());
     if (ghRepoUrlEl) ghRepoUrlEl.addEventListener("input", () => validateRepoPanel());
     if (ghTokenEl) ghTokenEl.addEventListener("input", () => updatePrivateModeIndicator());
+    if (ghPrivateModeEl) ghPrivateModeEl.addEventListener("change", () => updatePrivateModeIndicator());
   }
 
   function bindGraphControls() {
