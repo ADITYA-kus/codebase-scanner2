@@ -3,6 +3,10 @@ import subprocess
 import sys
 import unittest
 
+from fastapi.testclient import TestClient
+
+from ui.app import app
+
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -44,6 +48,32 @@ class TestCliTokenSecurity(unittest.TestCase):
 
         combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
         self.assertNotIn(token, combined)
+
+        token_bytes = token.encode("utf-8")
+        for path in self._cache_files():
+            try:
+                with open(path, "rb") as f:
+                    data = f.read()
+                self.assertNotIn(token_bytes, data, msg=f"Token leaked in file: {path}")
+            except OSError:
+                continue
+
+    def test_ui_byok_proxy_does_not_echo_or_persist_key(self):
+        token = "gsk_TESTTOKEN1234567890abcDEF"
+        client = TestClient(app)
+        response = client.post(
+            "/api/ui/byok_proxy",
+            json={
+                "provider": "gemini",
+                "api_key": token,
+                "action": "repo_summary",
+                "repo": "non_existing_repo_for_byok_test",
+                "force_regenerate": False,
+            },
+        )
+        self.assertIn(response.status_code, (200, 400))
+        text = response.text
+        self.assertNotIn(token, text)
 
         token_bytes = token.encode("utf-8")
         for path in self._cache_files():

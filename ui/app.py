@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -20,6 +21,8 @@ from analysis.utils.cache_manager import (
     touch_last_accessed,
 )
 from security_utils import redact_payload, redact_secrets
+from ui.device_id import get_or_create_device_id
+from ui.hosted_ai import hosted_llm_explain, hosted_repo_summary
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -229,11 +232,23 @@ def _upsert_workspace_repo(entry: Dict[str, Any], set_active: bool = True) -> Di
 
 
 def _cli_json(args: List[str], timeout_sec: int = 1800) -> Dict[str, Any]:
-    return _cli_json_with_input(args=args, timeout_sec=timeout_sec, stdin_text=None)
+    return _cli_json_with_input(args=args, timeout_sec=timeout_sec, stdin_text=None, extra_env=None)
 
 
-def _cli_json_with_input(args: List[str], timeout_sec: int = 1800, stdin_text: Optional[str] = None) -> Dict[str, Any]:
+def _cli_json_with_input(
+    args: List[str],
+    timeout_sec: int = 1800,
+    stdin_text: Optional[str] = None,
+    extra_env: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
     cmd = [sys.executable, os.path.join(PROJECT_ROOT, "cli.py"), "api"] + list(args)
+    env = os.environ.copy()
+    if isinstance(extra_env, dict):
+        for k, v in extra_env.items():
+            key = str(k or "").strip()
+            if not key:
+                continue
+            env[key] = str(v or "")
     try:
         proc = subprocess.run(
             cmd,
@@ -241,6 +256,7 @@ def _cli_json_with_input(args: List[str], timeout_sec: int = 1800, stdin_text: O
             capture_output=True,
             text=True,
             input=stdin_text,
+            env=env,
             timeout=timeout_sec,
             check=False,
         )
@@ -329,6 +345,49 @@ def _repo_ctx(repo: Optional[str]) -> Dict[str, str]:
     except Exception:
         pass
     return ctx
+
+
+def _resolve_repo_dir_from_payload(payload: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    if not isinstance(payload, dict):
+        payload = {}
+
+    repo_raw = payload.get("repo")
+    if isinstance(repo_raw, str) and repo_raw.strip():
+        return _resolve_repo_dir(repo_raw.strip()), None
+
+    repo_hash = str(payload.get("repo_hash", "") or "").strip()
+    if repo_hash:
+        ws = _ensure_default_workspace()
+        for repo in ws.get("repos", []):
+            if isinstance(repo, dict) and str(repo.get("repo_hash", "")) == repo_hash:
+                return _resolve_repo_dir(str(repo.get("path", "") or "")), None
+        return None, "REPO_NOT_FOUND"
+
+    github_url = str(payload.get("github", "") or "").strip()
+    if github_url:
+        ref = str(payload.get("ref", "") or "main").strip() or "main"
+        mode = str(payload.get("mode", "") or "zip").strip().lower() or "zip"
+        try:
+            from analysis.utils.repo_fetcher import resolve_workspace_paths
+
+            ws_paths = resolve_workspace_paths(github_url, ref, mode)
+            return str(ws_paths.get("repo_dir", "") or ""), None
+        except Exception as e:
+            return None, redact_secrets(str(e))
+
+    active = _get_active_repo_entry()
+    if active:
+        return _resolve_repo_dir(str(active.get("path", "") or "")), None
+    return None, "NO_ACTIVE_REPO"
+
+
+def _resolve_device_id(request: Request, payload: Dict[str, Any]) -> str:
+    header_id = str(request.headers.get("X-CodeMap-Device", "") or "").strip()
+    body_id = str((payload or {}).get("device_id", "") or "").strip()
+    candidate = header_id or body_id
+    if candidate and re.match(r"^[a-zA-Z0-9._-]{8,128}$", candidate):
+        return candidate
+    return get_or_create_device_id(GLOBAL_CACHE_DIR)
 
 
 def _has_analysis_cache(ctx: Dict[str, str]) -> bool:
@@ -1254,6 +1313,207 @@ def api_repo_summary(repo: Optional[str] = Query(default=None)):
         "repo_summary": data,
         "updated_at": mtime,
     }
+
+
+@app.get("/api/hosted/health")
+def api_hosted_health():
+    provider = str(os.getenv("CODEMAP_HOSTED_PROVIDER", "gemini") or "gemini").strip().lower()
+    try:
+        daily_quota = int(str(os.getenv("CODEMAP_HOSTED_DAILY_QUOTA", "20") or "20"))
+    except Exception:
+        daily_quota = 20
+    try:
+        min_interval = int(str(os.getenv("CODEMAP_HOSTED_MIN_INTERVAL_SEC", "5") or "5"))
+    except Exception:
+        min_interval = 5
+    return {
+        "ok": True,
+        "mode": "hosted",
+        "provider": provider,
+        "daily_quota": max(1, daily_quota),
+        "min_interval_sec": max(0, min_interval),
+        "device_id": get_or_create_device_id(GLOBAL_CACHE_DIR),
+    }
+
+
+@app.post("/api/hosted/llm_explain")
+async def api_hosted_llm_explain(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    fqn = str(payload.get("fqn", "") or "").strip()
+    if not fqn:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_FQN"})
+
+    repo_dir, err = _resolve_repo_dir_from_payload(payload)
+    if err or not repo_dir:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": err or "INVALID_REPO", "message": "Provide a valid repo"},
+        )
+    force = bool(payload.get("force", False))
+    device_id = _resolve_device_id(request, payload)
+
+    result = hosted_llm_explain(
+        cache_root=GLOBAL_CACHE_DIR,
+        repo_dir=repo_dir,
+        fqn=fqn,
+        device_id=device_id,
+        force=force,
+    )
+    try:
+        touch_last_accessed(compute_repo_hash(repo_dir))
+    except Exception:
+        pass
+    status = 200 if result.get("ok") else 400
+    return JSONResponse(status_code=status, content=redact_payload(result))
+
+
+@app.post("/api/hosted/repo_summary")
+async def api_hosted_repo_summary(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    repo_dir, err = _resolve_repo_dir_from_payload(payload)
+    if err or not repo_dir:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": err or "INVALID_REPO", "message": "Provide a valid repo"},
+        )
+    force = bool(payload.get("force", False))
+    device_id = _resolve_device_id(request, payload)
+
+    result = hosted_repo_summary(
+        cache_root=GLOBAL_CACHE_DIR,
+        repo_dir=repo_dir,
+        device_id=device_id,
+        force=force,
+    )
+    if result.get("ok"):
+        lines = [ln.strip() for ln in str(result.get("summary", "") or "").splitlines() if ln.strip()]
+        one_liner = lines[0].lstrip("- ").strip() if lines else ""
+        bullets = [ln.lstrip("- ").strip() for ln in lines[1:8]]
+        cache_dir = get_cache_dir(repo_dir)
+        payload_file = {
+            "ok": True,
+            "provider": result.get("provider"),
+            "cached": bool(result.get("cached", False)),
+            "summary": {"one_liner": one_liner, "bullets": bullets, "notes": []},
+            "error": None,
+        }
+        try:
+            _save_json(os.path.join(cache_dir, "repo_summary.json"), payload_file)
+            touch_last_accessed(compute_repo_hash(repo_dir))
+        except Exception:
+            pass
+    status = 200 if result.get("ok") else 400
+    return JSONResponse(status_code=status, content=redact_payload(result))
+
+
+@app.post("/api/ui/byok_proxy")
+async def api_ui_byok_proxy(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+
+    provider = str(payload.get("provider", "") or "").strip().lower()
+    action = str(payload.get("action", "") or "").strip().lower()
+    api_key = str(payload.get("api_key", "") or "").strip()
+    force_regenerate = bool(payload.get("force_regenerate", False))
+
+    if provider not in {"gemini", "groq", "xai"}:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "mode": "byok", "error": "INVALID_PROVIDER", "message": "provider must be gemini|groq|xai"},
+        )
+    if action not in {"repo_summary", "llm_explain"}:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "mode": "byok", "error": "INVALID_ACTION", "message": "action must be repo_summary|llm_explain"},
+        )
+    if not api_key:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "mode": "byok", "provider": provider, "error": "BYOK_KEY_REQUIRED", "message": "Add your API key to use BYOK."},
+        )
+
+    repo_dir, err = _resolve_repo_dir_from_payload(payload)
+    if err or not repo_dir:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "mode": "byok", "provider": provider, "error": err or "INVALID_REPO", "message": "Provide a valid repo"},
+        )
+
+    extra_env = {
+        "CODEMAP_LLM": provider,
+        "CODEMAP_ALLOW_FALLBACK": "0",
+    }
+    key_var = {
+        "gemini": "GEMINI_API_KEY",
+        "groq": "GROQ_API_KEY",
+        "xai": "XAI_API_KEY",
+    }[provider]
+    extra_env[key_var] = api_key
+
+    cli_args: List[str]
+    if action == "repo_summary":
+        cli_args = ["repo_summary", "--repo", repo_dir, "--mode", "byok"]
+        if force_regenerate:
+            cli_args.append("--force")
+    else:
+        symbol = str(payload.get("symbol", "") or "").strip()
+        if not symbol:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "mode": "byok", "provider": provider, "error": "INVALID_SYMBOL", "message": "symbol is required for llm_explain"},
+            )
+        cli_args = ["llm_explain", symbol, "--repo", repo_dir, "--mode", "byok"]
+        if force_regenerate:
+            cli_args.append("--force")
+
+    try:
+        result = _cli_json_with_input(args=cli_args, timeout_sec=240, stdin_text=None, extra_env=extra_env)
+    finally:
+        # Drop in-memory key references immediately.
+        api_key = ""
+        extra_env[key_var] = ""
+
+    now_iso = _now_utc()
+    ok = bool(result.get("ok"))
+    if ok:
+        try:
+            touch_last_accessed(compute_repo_hash(repo_dir))
+        except Exception:
+            pass
+
+    if action == "repo_summary":
+        summary_obj = result.get("summary", {}) if isinstance(result.get("summary"), dict) else {}
+        lines: List[str] = []
+        one_liner = str(summary_obj.get("one_liner", "") or "").strip()
+        if one_liner:
+            lines.append(one_liner)
+        bullets = summary_obj.get("bullets", [])
+        if isinstance(bullets, list):
+            lines.extend([str(b).strip() for b in bullets if str(b).strip()])
+        summary_text = "\n".join(lines).strip()
+        response = {
+            "ok": ok,
+            "mode": "byok",
+            "provider": str(result.get("provider", "") or provider),
+            "cached": bool(result.get("cached", False)),
+            "updated_at": now_iso,
+            "summary_text": summary_text,
+            "error": None if ok else redact_secrets(str(result.get("error") or result.get("message") or "BYOK request failed")),
+        }
+    else:
+        response = {
+            "ok": ok,
+            "mode": "byok",
+            "provider": str(result.get("provider", "") or provider),
+            "cached": bool(result.get("cached", False)),
+            "updated_at": now_iso,
+            "explain_text": str(result.get("summary", "") or ""),
+            "error": None if ok else redact_secrets(str(result.get("error") or result.get("message") or "BYOK request failed")),
+        }
+
+    return JSONResponse(status_code=200 if ok else 400, content=redact_payload(response))
 
 
 @app.get("/api/risk_radar")

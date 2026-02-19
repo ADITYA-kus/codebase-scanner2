@@ -18,6 +18,12 @@
     <div class="workspace-controls">
       <select id="repo-select" class="repo-select"></select>
       <button id="add-repo-btn" class="repo-btn" type="button">+ Add repo...</button>
+      <select id="ai-mode-select" class="repo-select ai-mode-select">
+        <option value="hosted" selected>Hosted AI (Free tier)</option>
+        <option value="byok">BYOK (Use my key)</option>
+      </select>
+      <button id="byok-config-btn" class="repo-btn hidden" type="button">BYOK Settings</button>
+      <span id="ai-mode-badge" class="repo-badge">AI: Hosted AI (Free tier)</span>
     </div>
     <div id="meta" class="meta">Loading...</div>
   </header>
@@ -192,6 +198,34 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
+  <div id="byok-modal" class="confirm-modal hidden">
+    <div class="confirm-card byok-card">
+      <div class="section-title">BYOK Configuration</div>
+      <div class="path">Use your own provider key. Key is used in memory only for this session.</div>
+      <div class="modal-form">
+        <label>Provider
+          <select id="byok-provider">
+            <option value="gemini" selected>gemini</option>
+            <option value="groq">groq</option>
+            <option value="xai">xai</option>
+          </select>
+        </label>
+        <label>API key
+          <input id="byok-api-key" type="password" placeholder="Enter key (never stored on disk)" />
+        </label>
+        <label class="path">
+          <input id="byok-session-only" type="checkbox" checked />
+          Save for this session only
+        </label>
+      </div>
+      <div id="byok-error" class="status"></div>
+      <div class="repo-row-actions">
+        <button id="byok-save" class="repo-btn" type="button">Save</button>
+        <button id="byok-clear" class="repo-btn danger" type="button">Clear key</button>
+        <button id="byok-cancel" class="repo-btn" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
   <div id="confirm-modal" class="confirm-modal hidden">
     <div class="confirm-card">
       <div id="confirm-title" class="section-title">Confirm action</div>

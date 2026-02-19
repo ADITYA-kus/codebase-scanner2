@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import sys
+from urllib import error, request
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -91,6 +92,108 @@ def _parse_iso_dt(value: Optional[str]) -> Optional[datetime]:
 
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _hosted_base_url() -> str:
+    value = str(os.getenv("CODEMAP_HOSTED_URL", "http://127.0.0.1:8000") or "http://127.0.0.1:8000").strip()
+    return value.rstrip("/")
+
+
+def _hosted_device_id() -> str:
+    try:
+        from ui.device_id import get_or_create_device_id
+
+        return get_or_create_device_id(_cache_root())
+    except Exception:
+        return ""
+
+
+def _hosted_post(path: str, payload: Dict[str, Any], timeout: int = 120) -> Tuple[bool, Dict[str, Any]]:
+    base = _hosted_base_url()
+    url = f"{base}{path}"
+    device_id = _hosted_device_id()
+    headers = {"Content-Type": "application/json"}
+    if device_id:
+        headers["X-CodeMap-Device"] = device_id
+    body = dict(payload or {})
+    if device_id and "device_id" not in body:
+        body["device_id"] = device_id
+    req = request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return True, data if isinstance(data, dict) else {"ok": False, "error": "INVALID_RESPONSE"}
+    except error.HTTPError as e:
+        try:
+            data = json.loads((e.read() or b"{}").decode("utf-8"))
+            if isinstance(data, dict):
+                return False, data
+        except Exception:
+            pass
+        return False, {"ok": False, "error": f"HTTP_{e.code}", "message": redact_secrets(str(e))}
+    except Exception:
+        return False, {"ok": False, "error": "HOSTED_SERVER_NOT_RUNNING", "message": "Hosted AI server not reachable."}
+
+
+def _hosted_health() -> Tuple[bool, Dict[str, Any]]:
+    base = _hosted_base_url()
+    url = f"{base}/api/hosted/health"
+    try:
+        with request.urlopen(url, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if isinstance(data, dict) and data.get("ok"):
+                return True, data
+    except Exception:
+        pass
+    return False, {"ok": False, "error": "HOSTED_SERVER_NOT_RUNNING"}
+
+
+def _resolve_ai_mode(args, default: str = "auto") -> str:
+    if bool(getattr(args, "hosted_ai", False)):
+        return "hosted"
+    if bool(getattr(args, "byok", False)):
+        return "byok"
+    mode = str(getattr(args, "mode", default) or default).strip().lower()
+    if mode not in {"auto", "hosted", "byok"}:
+        return default
+    return mode
+
+
+def _hosted_summary_to_structured(summary_text: str) -> Dict[str, Any]:
+    lines = [ln.strip() for ln in str(summary_text or "").splitlines() if ln.strip()]
+    one_liner = lines[0].lstrip("- ").strip() if lines else ""
+    bullets = [ln.lstrip("- ").strip() for ln in lines[1:8]]
+    return {
+        "one_liner": one_liner,
+        "bullets": bullets,
+        "notes": [],
+        "top_orchestrators": [],
+        "critical_apis": [],
+        "dependency_cycles": [],
+    }
+
+
+def _call_hosted_llm_explain(repo_dir: str, fqn: str, force: bool = False) -> Tuple[bool, Dict[str, Any]]:
+    ok, data = _hosted_post(
+        "/api/hosted/llm_explain",
+        {"repo": repo_dir, "fqn": fqn, "force": bool(force)},
+        timeout=180,
+    )
+    return ok, data
+
+
+def _call_hosted_repo_summary(repo_dir: str, force: bool = False) -> Tuple[bool, Dict[str, Any]]:
+    ok, data = _hosted_post(
+        "/api/hosted/repo_summary",
+        {"repo": repo_dir, "force": bool(force)},
+        timeout=180,
+    )
+    return ok, data
 
 
 def _parse_duration_days(spec: str) -> Optional[float]:
@@ -260,6 +363,8 @@ def api_cache_help(_args) -> int:
             "python cli.py api cache retention --repo-hash <hash> --days 30 --yes",
             "python cli.py api cache sweep --dry-run",
             "python cli.py api cache sweep --yes",
+            "python cli.py api hosted llm_explain <fqn> --repo <path> [--force]",
+            "python cli.py api hosted repo_summary --repo <path> [--force]",
         ],
     })
     return 0
@@ -974,7 +1079,44 @@ def api_llm_explain(args) -> int:
         })
         return 1
 
-    result = llm_explain_symbol(fqn=args.fqn, repo_dir=paths["repo_dir"], no_cache=args.no_cache)
+    mode = _resolve_ai_mode(args, default="auto")
+    force = bool(getattr(args, "force", False) or getattr(args, "no_cache", False))
+
+    if mode in {"hosted", "auto"}:
+        hosted_health_ok, _ = _hosted_health()
+        if mode == "hosted" and not hosted_health_ok:
+            result = {
+                "ok": False,
+                "summary": "",
+                "provider": "",
+                "model": "",
+                "cached": False,
+                "error": "HOSTED_SERVER_NOT_RUNNING",
+            }
+            print_json(result)
+            _touch_repo_access_by_dir(paths["repo_dir"])
+            return 1
+
+        if hosted_health_ok:
+            _ok, hosted = _call_hosted_llm_explain(
+                repo_dir=paths["repo_dir"],
+                fqn=args.fqn,
+                force=force,
+            )
+            if hosted.get("ok"):
+                print_json(hosted)
+                _touch_repo_access_by_dir(paths["repo_dir"])
+                return 0
+            if mode == "auto" and str(hosted.get("error", "")).strip() not in {"HOSTED_SERVER_NOT_RUNNING"}:
+                print_json(hosted)
+                _touch_repo_access_by_dir(paths["repo_dir"])
+                return 1
+            if mode == "hosted":
+                print_json(hosted)
+                _touch_repo_access_by_dir(paths["repo_dir"])
+                return 1
+
+    result = llm_explain_symbol(fqn=args.fqn, repo_dir=paths["repo_dir"], no_cache=force)
     print_json(result)
     _touch_repo_access_by_dir(paths["repo_dir"])
     return 0 if result.get("ok") else 1
@@ -1003,6 +1145,68 @@ def api_repo_summary(args) -> int:
         })
         return 1
 
+    mode = _resolve_ai_mode(args, default="auto")
+    force = bool(getattr(args, "force", False))
+    if mode in {"hosted", "auto"}:
+        hosted_health_ok, _ = _hosted_health()
+        if mode == "hosted" and not hosted_health_ok:
+            print_json({
+                "ok": False,
+                "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+                "repo_hash": compute_repo_hash(repo_dir),
+                "cached": False,
+                "provider": None,
+                "summary": {},
+                "error": "HOSTED_SERVER_NOT_RUNNING",
+            })
+            return 1
+
+        if hosted_health_ok:
+            _ok, hosted = _call_hosted_repo_summary(repo_dir=repo_dir, force=force)
+            if hosted.get("ok"):
+                final_hosted = {
+                    "ok": True,
+                    "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+                    "repo_hash": compute_repo_hash(repo_dir),
+                    "cached": bool(hosted.get("cached", False)),
+                    "provider": hosted.get("provider"),
+                    "summary": _hosted_summary_to_structured(str(hosted.get("summary", "") or "")),
+                    "error": None,
+                    "remaining_quota": hosted.get("remaining_quota"),
+                    "mode": "hosted",
+                }
+                repo_summary_path = os.path.join(cache_dir, "repo_summary.json")
+                with open(repo_summary_path, "w", encoding="utf-8") as f:
+                    json.dump(final_hosted, f, indent=2)
+                print_json(final_hosted)
+                _touch_repo_access_by_dir(repo_dir)
+                return 0
+            if mode == "auto" and str(hosted.get("error", "")).strip() not in {"HOSTED_SERVER_NOT_RUNNING"}:
+                print_json({
+                    "ok": False,
+                    "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+                    "repo_hash": compute_repo_hash(repo_dir),
+                    "cached": False,
+                    "provider": hosted.get("provider"),
+                    "summary": {},
+                    "error": hosted.get("error") or hosted.get("message") or "HOSTED_FAILED",
+                })
+                _touch_repo_access_by_dir(repo_dir)
+                return 1
+
+            if mode == "hosted":
+                print_json({
+                    "ok": False,
+                    "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+                    "repo_hash": compute_repo_hash(repo_dir),
+                    "cached": False,
+                    "provider": hosted.get("provider"),
+                    "summary": {},
+                    "error": hosted.get("error") or hosted.get("message") or "HOSTED_FAILED",
+                })
+                _touch_repo_access_by_dir(repo_dir)
+                return 1
+
     result = generate_repo_summary(repo_cache_dir=cache_dir, llm_client=ai_client)
     if not result.get("ok"):
         print_json({
@@ -1030,6 +1234,100 @@ def api_repo_summary(args) -> int:
     with open(repo_summary_path, "w", encoding="utf-8") as f:
         json.dump(final, f, indent=2)
 
+    print_json(final)
+    _touch_repo_access_by_dir(repo_dir)
+    return 0
+
+
+def api_hosted_llm_explain(args) -> int:
+    paths = resolve_repo_paths(args.repo)
+    if not os.path.exists(paths["explain_path"]):
+        print_json({
+            "ok": False,
+            "error": "MISSING_ANALYSIS",
+            "message": MISSING_ANALYSIS_MESSAGE,
+        })
+        return 1
+
+    healthy, _ = _hosted_health()
+    if not healthy:
+        print_json({
+            "ok": False,
+            "summary": "",
+            "provider": "",
+            "model": "",
+            "cached": False,
+            "error": "HOSTED_SERVER_NOT_RUNNING",
+        })
+        return 1
+
+    _ok, result = _call_hosted_llm_explain(repo_dir=paths["repo_dir"], fqn=args.fqn, force=bool(args.force))
+    print_json(result)
+    _touch_repo_access_by_dir(paths["repo_dir"])
+    return 0 if result.get("ok") else 1
+
+
+def api_hosted_repo_summary(args) -> int:
+    from analysis.utils.cache_manager import compute_repo_hash
+
+    paths = resolve_repo_paths(args.repo)
+    repo_dir = paths["repo_dir"]
+    cache_dir = paths["cache_dir"]
+    architecture_metrics_path = os.path.join(cache_dir, "architecture_metrics.json")
+    dependency_cycles_path = os.path.join(cache_dir, "dependency_cycles.json")
+    if not os.path.exists(architecture_metrics_path) or not os.path.exists(dependency_cycles_path):
+        print_json({
+            "ok": False,
+            "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+            "repo_hash": compute_repo_hash(repo_dir),
+            "cached": False,
+            "provider": None,
+            "summary": {},
+            "error": "Missing architecture cache. Run: python cli.py api analyze --path <repo>",
+        })
+        return 1
+
+    healthy, _ = _hosted_health()
+    if not healthy:
+        print_json({
+            "ok": False,
+            "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+            "repo_hash": compute_repo_hash(repo_dir),
+            "cached": False,
+            "provider": None,
+            "summary": {},
+            "error": "HOSTED_SERVER_NOT_RUNNING",
+        })
+        return 1
+
+    _ok, hosted = _call_hosted_repo_summary(repo_dir=repo_dir, force=bool(args.force))
+    if not hosted.get("ok"):
+        print_json({
+            "ok": False,
+            "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+            "repo_hash": compute_repo_hash(repo_dir),
+            "cached": False,
+            "provider": hosted.get("provider"),
+            "summary": {},
+            "error": hosted.get("error") or hosted.get("message") or "HOSTED_FAILED",
+        })
+        _touch_repo_access_by_dir(repo_dir)
+        return 1
+
+    final = {
+        "ok": True,
+        "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
+        "repo_hash": compute_repo_hash(repo_dir),
+        "cached": bool(hosted.get("cached", False)),
+        "provider": hosted.get("provider"),
+        "summary": _hosted_summary_to_structured(str(hosted.get("summary", "") or "")),
+        "error": None,
+        "remaining_quota": hosted.get("remaining_quota"),
+        "mode": "hosted",
+    }
+    repo_summary_path = os.path.join(cache_dir, "repo_summary.json")
+    with open(repo_summary_path, "w", encoding="utf-8") as f:
+        json.dump(final, f, indent=2)
     print_json(final)
     _touch_repo_access_by_dir(repo_dir)
     return 0
@@ -1522,11 +1820,33 @@ def build_parser() -> argparse.ArgumentParser:
     p_api_llm_explain.add_argument("fqn", help="Fully-qualified symbol name")
     p_api_llm_explain.add_argument("--repo", required=True, help="Repository directory to analyze")
     p_api_llm_explain.add_argument("--no-cache", action="store_true", help="Bypass read-cache for this request")
+    p_api_llm_explain.add_argument("--mode", choices=["auto", "hosted", "byok"], default="auto", help="AI mode selection")
+    p_api_llm_explain.add_argument("--hosted-ai", action="store_true", help="Force hosted mode")
+    p_api_llm_explain.add_argument("--byok", action="store_true", help="Force BYOK mode")
+    p_api_llm_explain.add_argument("--force", action="store_true", help="Force regenerate (hosted: bypass cache)")
     p_api_llm_explain.set_defaults(func=api_llm_explain)
 
     p_api_repo_summary = api_sub.add_parser("repo_summary", help="LLM repo-level architectural summary")
     p_api_repo_summary.add_argument("--repo", required=True, help="Repository directory to summarize")
+    p_api_repo_summary.add_argument("--mode", choices=["auto", "hosted", "byok"], default="auto", help="AI mode selection")
+    p_api_repo_summary.add_argument("--hosted-ai", action="store_true", help="Force hosted mode")
+    p_api_repo_summary.add_argument("--byok", action="store_true", help="Force BYOK mode")
+    p_api_repo_summary.add_argument("--force", action="store_true", help="Force regenerate (hosted: bypass cache)")
     p_api_repo_summary.set_defaults(func=api_repo_summary)
+
+    p_api_hosted = api_sub.add_parser("hosted", help="Hosted AI proxy commands")
+    hosted_sub = p_api_hosted.add_subparsers(dest="hosted_command", required=True)
+
+    p_api_hosted_llm = hosted_sub.add_parser("llm_explain", help="Hosted AI explain for one symbol")
+    p_api_hosted_llm.add_argument("fqn", help="Fully-qualified symbol name")
+    p_api_hosted_llm.add_argument("--repo", required=True, help="Repository directory to analyze")
+    p_api_hosted_llm.add_argument("--force", action="store_true", help="Bypass hosted cache")
+    p_api_hosted_llm.set_defaults(func=api_hosted_llm_explain)
+
+    p_api_hosted_repo = hosted_sub.add_parser("repo_summary", help="Hosted AI repo summary")
+    p_api_hosted_repo.add_argument("--repo", required=True, help="Repository directory to summarize")
+    p_api_hosted_repo.add_argument("--force", action="store_true", help="Bypass hosted cache")
+    p_api_hosted_repo.set_defaults(func=api_hosted_repo_summary)
 
     p_api_risk_radar = api_sub.add_parser("risk_radar", help="Repo-level risk radar from cached architecture artifacts")
     p_api_risk_radar.add_argument("--repo", required=True, help="Repository directory")

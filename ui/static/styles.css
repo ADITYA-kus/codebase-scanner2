@@ -36,6 +36,15 @@ body {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.ai-mode-select {
+  min-width: 170px;
+}
+
+.byok-card {
+  width: min(520px, calc(100vw - 32px));
 }
 
 .add-repo-inline {

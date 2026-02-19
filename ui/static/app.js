@@ -4,6 +4,9 @@
   const repoPrivateBadgeEl = document.getElementById("repo-private-badge");
   const repoSelectEl = document.getElementById("repo-select");
   const addRepoBtnEl = document.getElementById("add-repo-btn");
+  const aiModeSelectEl = document.getElementById("ai-mode-select");
+  const byokConfigBtnEl = document.getElementById("byok-config-btn");
+  const aiModeBadgeEl = document.getElementById("ai-mode-badge");
   const treeStatusEl = document.getElementById("tree-status");
   const treeEl = document.getElementById("tree");
   const fileViewEl = document.getElementById("file-view");
@@ -68,9 +71,18 @@
   const confirmMessageEl = document.getElementById("confirm-message");
   const confirmYesEl = document.getElementById("confirm-yes");
   const confirmNoEl = document.getElementById("confirm-no");
+  const byokModalEl = document.getElementById("byok-modal");
+  const byokProviderEl = document.getElementById("byok-provider");
+  const byokApiKeyEl = document.getElementById("byok-api-key");
+  const byokSessionOnlyEl = document.getElementById("byok-session-only");
+  const byokErrorEl = document.getElementById("byok-error");
+  const byokSaveEl = document.getElementById("byok-save");
+  const byokCancelEl = document.getElementById("byok-cancel");
+  const byokClearEl = document.getElementById("byok-clear");
 
   const fileCache = new Map();
   const symbolCache = new Map();
+  const symbolAiSummaryCache = new Map();
   let repoDir = "";
   let repoName = "";
   let activeSymbolFqn = "";
@@ -90,6 +102,13 @@
   let repoSummaryUpdatedAt = "";
   let repoSummaryStatus = "idle"; // idle|loading|ready|missing|error
   let repoSummaryError = "";
+  let hostedDeviceId = "";
+  let hostedQuotaRemaining = null;
+  let hostedProvider = "hosted";
+  let aiMode = "hosted";
+  let byokProvider = "gemini";
+  let byokApiKey = "";
+  let byokSessionOnly = true;
   let riskRadar = null;
   let riskRadarUpdatedAt = "";
   let riskRadarStatus = "idle"; // idle|loading|ready|missing|error
@@ -203,6 +222,141 @@
     return `python cli.py api analyze --path ${r.repo_path || "<repo>"}`;
   }
 
+  function clearByokKeyInput() {
+    if (byokApiKeyEl) byokApiKeyEl.value = "";
+  }
+
+  function updateAiModeUi() {
+    const byokConfigured = !!byokApiKey;
+    if (aiModeBadgeEl) {
+      if (aiMode === "byok") {
+        aiModeBadgeEl.textContent = `AI: BYOK (${byokProvider})`;
+      } else {
+        aiModeBadgeEl.textContent = "AI: Hosted AI (Free tier)";
+      }
+    }
+    if (aiModeSelectEl) aiModeSelectEl.value = aiMode;
+    if (byokConfigBtnEl) byokConfigBtnEl.classList.toggle("hidden", aiMode !== "byok");
+    if (byokConfigBtnEl && aiMode === "byok") {
+      byokConfigBtnEl.textContent = byokConfigured ? "BYOK Settings" : "Set BYOK Key";
+    }
+  }
+
+  function closeByokModal() {
+    if (byokModalEl) byokModalEl.classList.add("hidden");
+    if (byokErrorEl) byokErrorEl.textContent = "";
+    clearByokKeyInput();
+    document.body.classList.remove("modal-open");
+  }
+
+  function openByokModal() {
+    if (!byokModalEl) return;
+    if (byokProviderEl) byokProviderEl.value = byokProvider || "gemini";
+    if (byokSessionOnlyEl) byokSessionOnlyEl.checked = !!byokSessionOnly;
+    if (byokErrorEl) byokErrorEl.textContent = "";
+    clearByokKeyInput();
+    byokModalEl.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+    if (byokApiKeyEl) byokApiKeyEl.focus();
+  }
+
+  async function callByokProxy(action, payload) {
+    const key = String(byokApiKey || "").trim();
+    if (!key) {
+      throw { ok: false, error: "BYOK_KEY_REQUIRED", message: "Add your API key to use BYOK." };
+    }
+    return fetchJson("/api/ui/byok_proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: byokProvider,
+        api_key: key,
+        action,
+        repo_hash: activeRepoHash || "",
+        repo: repoDir || "",
+        force_regenerate: !!(payload && payload.force_regenerate),
+        symbol: payload && payload.symbol ? String(payload.symbol) : "",
+      }),
+    });
+  }
+
+  function setAiMode(nextMode, options) {
+    const mode = String(nextMode || "").toLowerCase() === "byok" ? "byok" : "hosted";
+    const opts = options || {};
+    if (mode === "hosted") {
+      byokApiKey = "";
+      clearByokKeyInput();
+      closeByokModal();
+    } else if (mode === "byok" && !opts.skipPrompt && !byokApiKey) {
+      openByokModal();
+    }
+    aiMode = mode;
+    updateAiModeUi();
+  }
+
+  function bindByokModalControls() {
+    if (aiModeSelectEl) {
+      aiModeSelectEl.addEventListener("change", () => {
+        const next = aiModeSelectEl.value;
+        setAiMode(next);
+      });
+    }
+    if (byokConfigBtnEl) byokConfigBtnEl.addEventListener("click", () => openByokModal());
+    if (byokCancelEl) byokCancelEl.addEventListener("click", () => closeByokModal());
+    if (byokSaveEl) {
+      byokSaveEl.addEventListener("click", () => {
+        const provider = String((byokProviderEl && byokProviderEl.value) || "gemini").trim().toLowerCase();
+        const key = String((byokApiKeyEl && byokApiKeyEl.value) || "").trim();
+        if (!key) {
+          if (byokErrorEl) byokErrorEl.textContent = "API key is required for BYOK.";
+          return;
+        }
+        byokProvider = ["gemini", "groq", "xai"].includes(provider) ? provider : "gemini";
+        byokApiKey = key;
+        byokSessionOnly = !!(byokSessionOnlyEl && byokSessionOnlyEl.checked);
+        closeByokModal();
+        setAiMode("byok", { skipPrompt: true });
+        showToast(`BYOK configured (${byokProvider})`, "success");
+      });
+    }
+    if (byokClearEl) {
+      byokClearEl.addEventListener("click", () => {
+        byokApiKey = "";
+        clearByokKeyInput();
+        if (byokErrorEl) byokErrorEl.textContent = "";
+        showToast("BYOK key cleared", "success");
+        updateAiModeUi();
+      });
+    }
+    if (byokProviderEl) {
+      byokProviderEl.addEventListener("change", () => {
+        byokProvider = String(byokProviderEl.value || "gemini").trim().toLowerCase();
+      });
+    }
+    if (byokModalEl) {
+      byokModalEl.addEventListener("click", (e) => {
+        if (e.target === byokModalEl) closeByokModal();
+      });
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && byokModalEl && !byokModalEl.classList.contains("hidden")) {
+        closeByokModal();
+      }
+    });
+  }
+
+  async function loadHostedHealth() {
+    try {
+      const data = await fetchJson("/api/hosted/health");
+      hostedDeviceId = String(data.device_id || "");
+      hostedProvider = String(data.provider || "hosted");
+    } catch (_e) {
+      hostedDeviceId = "";
+      hostedProvider = "hosted";
+    }
+    updateAiModeUi();
+  }
+
   function analysisErrorMessage(errPayload) {
     const payload = (errPayload && errPayload.analyze_result) ? errPayload.analyze_result : (errPayload || {});
     const code = String(payload.error || (errPayload && errPayload.error) || "");
@@ -240,6 +394,7 @@
   function clearWorkspaceView(message) {
     fileCache.clear();
     symbolCache.clear();
+    symbolAiSummaryCache.clear();
     activeFilePath = "";
     activeSymbolFqn = "";
     closeSearchDropdown();
@@ -415,18 +570,25 @@
 
   function repoSummarySection() {
     const cmd = `python cli.py api repo_summary --repo ${repoName || "<repo>"}`;
-    const refreshBtn = "<button id='repo-summary-refresh' class='repo-refresh-btn' type='button'>Refresh summary</button>";
+    const modeLabel = aiMode === "byok" ? `BYOK (${byokProvider})` : "Hosted AI (Free tier)";
+    const controls = `
+      <div class="repo-row-actions">
+        <button id='repo-summary-refresh' class='repo-refresh-btn' type='button'>Refresh summary</button>
+        <label class="path"><input id="repo-summary-force" type="checkbox" /> Force regenerate</label>
+      </div>
+      <div class="path">AI Mode: ${esc(modeLabel)}${aiMode === "hosted" ? ` | remaining quota: ${esc(hostedQuotaRemaining == null ? "-" : String(hostedQuotaRemaining))}` : ""}</div>
+    `;
     if (repoSummaryStatus === "loading") {
-      return `<div class="card"><div class="section-title">Repo Summary</div>${refreshBtn}<div class="path">Loading summary...</div></div>`;
+      return `<div class="card"><div class="section-title">Repo Summary</div>${controls}<div class="path">Loading summary...</div></div>`;
     }
     if (repoSummaryStatus === "missing") {
-      return `<div class="card arch-missing"><div class="section-title">Repo Summary</div>${refreshBtn}<div>Repo summary not generated yet.</div><div class="path">${esc(cmd)}</div></div>`;
+      return `<div class="card arch-missing"><div class="section-title">Repo Summary</div>${controls}<div>Repo summary not generated yet.</div><div class="path">${esc(cmd)}</div></div>`;
     }
     if (repoSummaryStatus === "error") {
-      return `<div class="card arch-missing"><div class="section-title">Repo Summary</div>${refreshBtn}<div>${esc(repoSummaryError || "Failed to load repo summary.")}</div><div class="path">Run analyze, then: ${esc(cmd)}</div></div>`;
+      return `<div class="card arch-missing"><div class="section-title">Repo Summary</div>${controls}<div>${esc(repoSummaryError || "Failed to load repo summary.")}</div><div class="path">Run analyze, then: ${esc(cmd)}</div></div>`;
     }
     if (repoSummaryStatus !== "ready" || !repoSummary) {
-      return `<div class="card"><div class="section-title">Repo Summary</div>${refreshBtn}<div class="path">Summary is idle. Click refresh.</div></div>`;
+      return `<div class="card"><div class="section-title">Repo Summary</div>${controls}<div class="path">Summary is idle. Click refresh.</div></div>`;
     }
 
     const payload = repoSummary || {};
@@ -436,7 +598,7 @@
     return `
       <div class="card">
         <div class="section-title">Repo Summary</div>
-        ${refreshBtn}
+        ${controls}
         <div class="arch-one-liner">${esc(summary.one_liner || "")}</div>
         ${bullets.length ? `<ul class="arch-bullets">${bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>` : "<div class='muted'>No bullets available.</div>"}
         ${notes.length ? `<div class="section-title">Notes</div><ul class="arch-bullets">${notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
@@ -450,16 +612,51 @@
     repoSummaryStatus = "loading";
     repoSummaryError = "";
     try {
-      const data = await fetchJson("/api/repo_summary");
-      repoSummary = data.repo_summary || null;
-      repoSummaryUpdatedAt = data.updated_at || "";
+      let data;
+      if (aiMode === "byok") {
+        data = await callByokProxy("repo_summary", { force_regenerate: !!force });
+      } else {
+        data = await fetchJson("/api/hosted/repo_summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CodeMap-Device": hostedDeviceId || "" },
+          body: JSON.stringify({ force: !!force, device_id: hostedDeviceId || "" }),
+        });
+        hostedQuotaRemaining = Number.isFinite(Number(data.remaining_quota)) ? Number(data.remaining_quota) : hostedQuotaRemaining;
+      }
+      hostedProvider = String(data.provider || hostedProvider || "hosted");
+      const text = String(data.summary_text || data.summary || "");
+      const lines = text.split("\n").map((x) => x.trim()).filter(Boolean);
+      const oneLiner = lines[0] ? lines[0].replace(/^\-\s*/, "") : "";
+      const bullets = lines.slice(1, 8).map((x) => x.replace(/^\-\s*/, ""));
+      repoSummary = {
+        provider: String(data.provider || ""),
+        cached: !!data.cached,
+        summary: {
+          one_liner: oneLiner,
+          bullets,
+          notes: [],
+        },
+      };
+      repoSummaryUpdatedAt = new Date().toISOString();
       repoSummaryStatus = "ready";
     } catch (e) {
       repoSummary = null;
       repoSummaryUpdatedAt = "";
-      if (e && e.error === "MISSING_REPO_SUMMARY") {
+      if (e && (e.error === "MISSING_REPO_SUMMARY" || e.error === "MISSING_ANALYSIS")) {
         repoSummaryStatus = "missing";
         repoSummaryError = "";
+      } else if (e && e.error === "BYOK_KEY_REQUIRED") {
+        repoSummaryStatus = "error";
+        repoSummaryError = "Add your API key to use BYOK.";
+        openByokModal();
+      } else if (e && e.error === "QUOTA_EXCEEDED") {
+        repoSummaryStatus = "error";
+        repoSummaryError = "Daily free AI limit reached. Switch to BYOK to continue.";
+        showToast(repoSummaryError, "error");
+      } else if (e && e.error === "RATE_LIMITED") {
+        repoSummaryStatus = "error";
+        repoSummaryError = "Too many AI requests. Please wait a few seconds.";
+        showToast(repoSummaryError, "error");
       } else {
         repoSummaryStatus = "error";
         repoSummaryError = redactSecrets((e && (e.message || e.error)) || "Repo summary load failed");
@@ -612,7 +809,9 @@
       const refreshBtn = architectureViewEl.querySelector("#repo-summary-refresh");
       if (refreshBtn) {
         refreshBtn.addEventListener("click", async () => {
-          await loadRepoSummary(true);
+          const forceEl = architectureViewEl.querySelector("#repo-summary-force");
+          const force = !!(forceEl && forceEl.checked);
+          await loadRepoSummary(force);
           await loadArchitecture();
         });
       }
@@ -637,6 +836,13 @@
         });
       });
     } catch (e) {
+      const errCode = String((e && e.error) || "");
+      if (errCode === "MISSING_ARCHITECTURE_CACHE" || errCode === "CACHE_NOT_FOUND") {
+        architectureViewEl.classList.remove("muted");
+        architectureViewEl.innerHTML = renderMissingAnalysisCta("Run Analyze first to unlock Architecture AI summaries.");
+        bindRunAnalysisNowButton();
+        return;
+      }
       architectureViewEl.classList.remove("muted");
       architectureViewEl.innerHTML = `
         <div class="card arch-missing">
@@ -2262,6 +2468,48 @@
     return items.map(renderer).join("");
   }
 
+  async function refreshSymbolAiSummary(fqn, force) {
+    const key = String(fqn || "");
+    if (!key) return;
+    try {
+      let data;
+      if (aiMode === "byok") {
+        data = await callByokProxy("llm_explain", { symbol: key, force_regenerate: !!force });
+      } else {
+        data = await fetchJson("/api/hosted/llm_explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CodeMap-Device": hostedDeviceId || "" },
+          body: JSON.stringify({ fqn: key, force: !!force, device_id: hostedDeviceId || "" }),
+        });
+        hostedQuotaRemaining = Number.isFinite(Number(data.remaining_quota)) ? Number(data.remaining_quota) : hostedQuotaRemaining;
+      }
+      symbolAiSummaryCache.set(key, {
+        text: String(data.explain_text || data.summary || "").trim(),
+        provider: String(data.provider || ""),
+        cached: !!data.cached,
+        updatedAt: String(data.updated_at || new Date().toISOString()),
+        mode: aiMode,
+      });
+      if (activeSymbolFqn === key) {
+        symbolCache.delete(key);
+        await loadSymbol(key);
+      }
+      showToast("AI summary refreshed", "success");
+    } catch (e) {
+      const errCode = String((e && e.error) || "");
+      if (errCode === "BYOK_KEY_REQUIRED") {
+        showToast("Add your API key to use BYOK.", "error");
+        openByokModal();
+        return;
+      }
+      if (errCode === "QUOTA_EXCEEDED") {
+        showToast("Free quota exceeded. Switch to BYOK to continue.", "error");
+        return;
+      }
+      showToast(redactSecrets((e && (e.message || e.error)) || "AI summary refresh failed"), "error");
+    }
+  }
+
   async function loadSymbol(fqn) {
     activeSymbolFqn = fqn;
     highlightActiveSymbol();
@@ -2287,7 +2535,8 @@
         await loadFile(relFile);
       }
 
-      const summary = stripMarkdown(result.one_liner || "");
+      const aiSummary = symbolAiSummaryCache.get(result.fqn || fqn);
+      const summary = stripMarkdown((aiSummary && aiSummary.text) || result.one_liner || "");
       const notes = (result.details || []).filter((d) => String(d).startsWith("Returns:")).slice(0, 3).map(stripMarkdown);
       const symbolParts = parseSymbolParts(result.fqn || fqn);
       const locationText = `${relFile}:${loc.start_line || ""}`;
@@ -2320,6 +2569,11 @@
           <div class="path">${esc(locationText)}</div>
           <div class="divider"></div>
           <div class="section-title">Summary</div>
+          <div class="repo-row-actions">
+            <button id="symbol-ai-refresh-btn" class="repo-btn small" type="button">Refresh AI summary</button>
+            <label class="path"><input id="symbol-ai-force" type="checkbox" /> Force regenerate</label>
+          </div>
+          <div class="path">AI Mode: ${esc(aiMode === "byok" ? `BYOK (${byokProvider})` : "Hosted AI (Free tier)")} ${aiSummary ? `| provider: ${esc(aiSummary.provider || "")} | cached: ${esc(String(aiSummary.cached))}` : ""}</div>
           <div>${esc(summary)}</div>
           <div id="called-by-section" class="divider"></div>
           <div class="section-title">Called by</div>
@@ -2365,6 +2619,21 @@
       bindConnectionLinks(symbolViewEl);
       bindBreadcrumbs(symbolViewEl, result.fqn || fqn);
       bindConnectionChips(symbolViewEl);
+      const refreshBtn = symbolViewEl.querySelector("#symbol-ai-refresh-btn");
+      if (refreshBtn) {
+        refreshBtn.addEventListener("click", async () => {
+          const forceEl = symbolViewEl.querySelector("#symbol-ai-force");
+          const force = !!(forceEl && forceEl.checked);
+          refreshBtn.disabled = true;
+          refreshBtn.textContent = "Refreshing...";
+          try {
+            await refreshSymbolAiSummary(result.fqn || fqn, force);
+          } finally {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = "Refresh AI summary";
+          }
+        });
+      }
       highlightActiveSymbol();
       await updateUiState({ opened_symbol: (result.fqn || fqn), last_symbol: (result.fqn || fqn) });
       if (activeTab === "graph" && graphParams().mode === "symbol") {
@@ -2382,6 +2651,7 @@
   async function refreshForActiveRepo() {
     clearWorkspaceView("Loading workspace...");
     architectureCache = null;
+    symbolAiSummaryCache.clear();
     repoSummary = null;
     repoSummaryUpdatedAt = "";
     repoSummaryStatus = "idle";
@@ -2408,11 +2678,13 @@
   async function init() {
     bindSearchInput();
     bindWorkspaceControls();
+    bindByokModalControls();
     bindRepoInlineControls();
     bindDataPrivacyControls();
     bindGraphControls();
     setActiveTab("details");
     try {
+      await loadHostedHealth();
       await loadWorkspace();
       await refreshForActiveRepo();
     } catch (e) {
