@@ -4,8 +4,7 @@
   const repoPrivateBadgeEl = document.getElementById("repo-private-badge");
   const repoSelectEl = document.getElementById("repo-select");
   const addRepoBtnEl = document.getElementById("add-repo-btn");
-  const aiModeSelectEl = document.getElementById("ai-mode-select");
-  const byokConfigBtnEl = document.getElementById("byok-config-btn");
+  const aiSettingsBtnEl = document.getElementById("ai-settings-btn");
   const aiModeBadgeEl = document.getElementById("ai-mode-badge");
   const treeStatusEl = document.getElementById("tree-status");
   const treeEl = document.getElementById("tree");
@@ -48,7 +47,6 @@
   const ghTokenEl = document.getElementById("gh-token");
   const ghPrivateModeEl = document.getElementById("gh-private-mode");
   const privateModeIndicatorEl = document.getElementById("private-mode-indicator");
-  const repoOpenAfterAddEl = document.getElementById("repo-open-after-add");
   const repoModalErrorEl = document.getElementById("repo-modal-error");
   const repoAddBtnEl = document.getElementById("repo-add-btn");
   const repoCancelBtnEl = document.getElementById("repo-cancel-btn");
@@ -71,14 +69,16 @@
   const confirmMessageEl = document.getElementById("confirm-message");
   const confirmYesEl = document.getElementById("confirm-yes");
   const confirmNoEl = document.getElementById("confirm-no");
-  const byokModalEl = document.getElementById("byok-modal");
-  const byokProviderEl = document.getElementById("byok-provider");
-  const byokApiKeyEl = document.getElementById("byok-api-key");
-  const byokSessionOnlyEl = document.getElementById("byok-session-only");
-  const byokErrorEl = document.getElementById("byok-error");
-  const byokSaveEl = document.getElementById("byok-save");
-  const byokCancelEl = document.getElementById("byok-cancel");
-  const byokClearEl = document.getElementById("byok-clear");
+  const aiSettingsModalEl = document.getElementById("ai-settings-modal");
+  const aiSettingsProviderEl = document.getElementById("ai-settings-provider");
+  const aiSettingsKeyEl = document.getElementById("ai-settings-key");
+  const aiSettingsModelEl = document.getElementById("ai-settings-model");
+  const aiSettingsSaveLocalEl = document.getElementById("ai-settings-save-local");
+  const aiSettingsTestEl = document.getElementById("ai-settings-test");
+  const aiSettingsSaveEl = document.getElementById("ai-settings-save");
+  const aiSettingsClearEl = document.getElementById("ai-settings-clear");
+  const aiSettingsCancelEl = document.getElementById("ai-settings-cancel");
+  const aiSettingsStatusEl = document.getElementById("ai-settings-status");
 
   const fileCache = new Map();
   const symbolCache = new Map();
@@ -102,13 +102,10 @@
   let repoSummaryUpdatedAt = "";
   let repoSummaryStatus = "idle"; // idle|loading|ready|missing|error
   let repoSummaryError = "";
-  let hostedDeviceId = "";
-  let hostedQuotaRemaining = null;
-  let hostedProvider = "hosted";
-  let aiMode = "hosted";
-  let byokProvider = "gemini";
-  let byokApiKey = "";
-  let byokSessionOnly = true;
+  let aiEnabled = false;
+  let aiProvider = "";
+  let aiModel = "";
+  let aiStatusMessage = "AI summary is disabled. Open Settings -> AI to enable (optional).";
   let riskRadar = null;
   let riskRadarUpdatedAt = "";
   let riskRadarStatus = "idle"; // idle|loading|ready|missing|error
@@ -159,6 +156,17 @@
       .replace(/[*#`]/g, "")
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  function _summaryFromMarkdown(content) {
+    const lines = String(content || "").split("\n").map((x) => x.trim()).filter(Boolean);
+    const oneLiner = lines.length ? lines[0].replace(/^\-\s*/, "") : "";
+    const bullets = lines.slice(1, 8).map((x) => x.replace(/^\-\s*/, "")).filter(Boolean);
+    return {
+      one_liner: oneLiner,
+      bullets,
+      notes: [],
+    };
   }
 
   function relPath(p) {
@@ -222,139 +230,138 @@
     return `python cli.py api analyze --path ${r.repo_path || "<repo>"}`;
   }
 
-  function clearByokKeyInput() {
-    if (byokApiKeyEl) byokApiKeyEl.value = "";
-  }
-
   function updateAiModeUi() {
-    const byokConfigured = !!byokApiKey;
-    if (aiModeBadgeEl) {
-      if (aiMode === "byok") {
-        aiModeBadgeEl.textContent = `AI: BYOK (${byokProvider})`;
-      } else {
-        aiModeBadgeEl.textContent = "AI: Hosted AI (Free tier)";
-      }
-    }
-    if (aiModeSelectEl) aiModeSelectEl.value = aiMode;
-    if (byokConfigBtnEl) byokConfigBtnEl.classList.toggle("hidden", aiMode !== "byok");
-    if (byokConfigBtnEl && aiMode === "byok") {
-      byokConfigBtnEl.textContent = byokConfigured ? "BYOK Settings" : "Set BYOK Key";
+    if (!aiModeBadgeEl) return;
+    if (aiEnabled) {
+      aiModeBadgeEl.textContent = `AI: BYOK (${(aiProvider || "auto").toUpperCase()})`;
+    } else {
+      aiModeBadgeEl.textContent = "AI: BYOK (disabled)";
     }
   }
 
-  function closeByokModal() {
-    if (byokModalEl) byokModalEl.classList.add("hidden");
-    if (byokErrorEl) byokErrorEl.textContent = "";
-    clearByokKeyInput();
+  async function loadAiStatus() {
+    try {
+      const data = await fetchJson("/api/settings/ai");
+      aiEnabled = !!data.configured;
+      aiProvider = String(data.provider || "none");
+      aiModel = String(data.model || "");
+      aiStatusMessage = String(data.message || "AI summary is disabled. Open Settings -> AI to enable (optional).");
+    } catch (_e) {
+      aiEnabled = false;
+      aiProvider = "none";
+      aiModel = "";
+      aiStatusMessage = "AI summary is disabled. Open Settings -> AI to enable (optional).";
+    }
+    updateAiModeUi();
+  }
+
+  async function callAiEndpoint(action, payload) {
+    const body = {
+      action,
+      repo_hash: activeRepoHash || "",
+      repo: repoDir || "",
+      force: !!(payload && payload.force),
+      symbol: payload && payload.symbol ? String(payload.symbol) : "",
+    };
+    return fetchJson(`/api/ai/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  function setAiSettingsStatus(message, isError) {
+    if (!aiSettingsStatusEl) return;
+    aiSettingsStatusEl.textContent = redactSecrets(String(message || ""));
+    aiSettingsStatusEl.classList.toggle("error", !!isError);
+  }
+
+  function closeAiSettingsModal() {
+    if (!aiSettingsModalEl) return;
+    aiSettingsModalEl.classList.add("hidden");
+    if (aiSettingsKeyEl) aiSettingsKeyEl.value = "";
+    setAiSettingsStatus("", false);
     document.body.classList.remove("modal-open");
   }
 
-  function openByokModal() {
-    if (!byokModalEl) return;
-    if (byokProviderEl) byokProviderEl.value = byokProvider || "gemini";
-    if (byokSessionOnlyEl) byokSessionOnlyEl.checked = !!byokSessionOnly;
-    if (byokErrorEl) byokErrorEl.textContent = "";
-    clearByokKeyInput();
-    byokModalEl.classList.remove("hidden");
+  async function openAiSettingsModal() {
+    if (!aiSettingsModalEl) return;
+    await loadAiStatus();
+    if (aiSettingsProviderEl) aiSettingsProviderEl.value = String(aiProvider || "none");
+    if (aiSettingsModelEl) aiSettingsModelEl.value = String(aiModel || "");
+    if (aiSettingsSaveLocalEl) aiSettingsSaveLocalEl.checked = true;
+    if (aiSettingsKeyEl) aiSettingsKeyEl.value = "";
+    setAiSettingsStatus(aiEnabled ? "Configured." : "Not configured.", false);
+    aiSettingsModalEl.classList.remove("hidden");
     document.body.classList.add("modal-open");
-    if (byokApiKeyEl) byokApiKeyEl.focus();
   }
 
-  async function callByokProxy(action, payload) {
-    const key = String(byokApiKey || "").trim();
-    if (!key) {
-      throw { ok: false, error: "BYOK_KEY_REQUIRED", message: "Add your API key to use BYOK." };
-    }
-    return fetchJson("/api/ui/byok_proxy", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        provider: byokProvider,
-        api_key: key,
-        action,
-        repo_hash: activeRepoHash || "",
-        repo: repoDir || "",
-        force_regenerate: !!(payload && payload.force_regenerate),
-        symbol: payload && payload.symbol ? String(payload.symbol) : "",
-      }),
-    });
-  }
-
-  function setAiMode(nextMode, options) {
-    const mode = String(nextMode || "").toLowerCase() === "byok" ? "byok" : "hosted";
-    const opts = options || {};
-    if (mode === "hosted") {
-      byokApiKey = "";
-      clearByokKeyInput();
-      closeByokModal();
-    } else if (mode === "byok" && !opts.skipPrompt && !byokApiKey) {
-      openByokModal();
-    }
-    aiMode = mode;
-    updateAiModeUi();
-  }
-
-  function bindByokModalControls() {
-    if (aiModeSelectEl) {
-      aiModeSelectEl.addEventListener("change", () => {
-        const next = aiModeSelectEl.value;
-        setAiMode(next);
-      });
-    }
-    if (byokConfigBtnEl) byokConfigBtnEl.addEventListener("click", () => openByokModal());
-    if (byokCancelEl) byokCancelEl.addEventListener("click", () => closeByokModal());
-    if (byokSaveEl) {
-      byokSaveEl.addEventListener("click", () => {
-        const provider = String((byokProviderEl && byokProviderEl.value) || "gemini").trim().toLowerCase();
-        const key = String((byokApiKeyEl && byokApiKeyEl.value) || "").trim();
-        if (!key) {
-          if (byokErrorEl) byokErrorEl.textContent = "API key is required for BYOK.";
-          return;
-        }
-        byokProvider = ["gemini", "groq", "xai"].includes(provider) ? provider : "gemini";
-        byokApiKey = key;
-        byokSessionOnly = !!(byokSessionOnlyEl && byokSessionOnlyEl.checked);
-        closeByokModal();
-        setAiMode("byok", { skipPrompt: true });
-        showToast(`BYOK configured (${byokProvider})`, "success");
-      });
-    }
-    if (byokClearEl) {
-      byokClearEl.addEventListener("click", () => {
-        byokApiKey = "";
-        clearByokKeyInput();
-        if (byokErrorEl) byokErrorEl.textContent = "";
-        showToast("BYOK key cleared", "success");
-        updateAiModeUi();
-      });
-    }
-    if (byokProviderEl) {
-      byokProviderEl.addEventListener("change", () => {
-        byokProvider = String(byokProviderEl.value || "gemini").trim().toLowerCase();
-      });
-    }
-    if (byokModalEl) {
-      byokModalEl.addEventListener("click", (e) => {
-        if (e.target === byokModalEl) closeByokModal();
-      });
-    }
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && byokModalEl && !byokModalEl.classList.contains("hidden")) {
-        closeByokModal();
-      }
-    });
-  }
-
-  async function loadHostedHealth() {
+  async function saveAiSettings() {
+    const provider = String(aiSettingsProviderEl && aiSettingsProviderEl.value ? aiSettingsProviderEl.value : "none").trim().toLowerCase();
+    const apiKey = String(aiSettingsKeyEl && aiSettingsKeyEl.value ? aiSettingsKeyEl.value : "").trim();
+    const model = String(aiSettingsModelEl && aiSettingsModelEl.value ? aiSettingsModelEl.value : "").trim();
+    const saveLocal = !!(aiSettingsSaveLocalEl && aiSettingsSaveLocalEl.checked);
     try {
-      const data = await fetchJson("/api/hosted/health");
-      hostedDeviceId = String(data.device_id || "");
-      hostedProvider = String(data.provider || "hosted");
-    } catch (_e) {
-      hostedDeviceId = "";
-      hostedProvider = "hosted";
+      const data = await fetchJson("/api/settings/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          api_key: apiKey,
+          model,
+          save_local: saveLocal,
+        }),
+      });
+      if (aiSettingsKeyEl) aiSettingsKeyEl.value = "";
+      setAiSettingsStatus(data.configured ? "Saved." : "AI disabled.", false);
+      await loadAiStatus();
+      closeAiSettingsModal();
+      showToast(data.configured ? `AI settings saved (${String(data.provider || "none").toUpperCase()})` : "AI disabled", "success");
+    } catch (e) {
+      setAiSettingsStatus((e && (e.message || e.error)) || "Failed to save settings.", true);
+      showToast(redactSecrets((e && (e.message || e.error)) || "Failed to save settings."), "error");
+    } finally {
+      if (aiSettingsKeyEl) aiSettingsKeyEl.value = "";
     }
-    updateAiModeUi();
+  }
+
+  async function testAiSettings() {
+    const provider = String(aiSettingsProviderEl && aiSettingsProviderEl.value ? aiSettingsProviderEl.value : "none").trim().toLowerCase();
+    const apiKey = String(aiSettingsKeyEl && aiSettingsKeyEl.value ? aiSettingsKeyEl.value : "").trim();
+    const model = String(aiSettingsModelEl && aiSettingsModelEl.value ? aiSettingsModelEl.value : "").trim();
+    if (!provider || provider === "none") {
+      setAiSettingsStatus("Select provider first.", true);
+      return;
+    }
+    try {
+      const data = await fetchJson("/api/settings/ai/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, api_key: apiKey, model }),
+      });
+      setAiSettingsStatus(data.message || "Test passed.", false);
+      showToast("AI key test passed", "success");
+    } catch (e) {
+      const msg = redactSecrets((e && (e.message || e.error)) || "AI key test failed.");
+      setAiSettingsStatus(msg, true);
+      showToast(msg, "error");
+    }
+  }
+
+  async function clearAiSettings() {
+    try {
+      await fetchJson("/api/settings/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: "none", api_key: "", model: "", save_local: true }),
+      });
+      if (aiSettingsKeyEl) aiSettingsKeyEl.value = "";
+      await loadAiStatus();
+      closeAiSettingsModal();
+      showToast("AI settings cleared", "success");
+    } catch (e) {
+      showToast(redactSecrets((e && (e.message || e.error)) || "Failed to clear settings."), "error");
+    }
   }
 
   function analysisErrorMessage(errPayload) {
@@ -570,19 +577,25 @@
 
   function repoSummarySection() {
     const cmd = `python cli.py api repo_summary --repo ${repoName || "<repo>"}`;
-    const modeLabel = aiMode === "byok" ? `BYOK (${byokProvider})` : "Hosted AI (Free tier)";
+    const modeLabel = aiEnabled ? `BYOK (${aiProvider || "auto"})` : "BYOK (disabled)";
     const controls = `
       <div class="repo-row-actions">
-        <button id='repo-summary-refresh' class='repo-refresh-btn' type='button'>Refresh summary</button>
+        <button id='repo-summary-refresh' class='repo-refresh-btn' type='button' ${aiEnabled ? "" : "disabled"}>Generate AI summary</button>
         <label class="path"><input id="repo-summary-force" type="checkbox" /> Force regenerate</label>
       </div>
-      <div class="path">AI Mode: ${esc(modeLabel)}${aiMode === "hosted" ? ` | remaining quota: ${esc(hostedQuotaRemaining == null ? "-" : String(hostedQuotaRemaining))}` : ""}</div>
+      <div class="path">AI Mode: ${esc(modeLabel)}</div>
     `;
     if (repoSummaryStatus === "loading") {
       return `<div class="card"><div class="section-title">Repo Summary</div>${controls}<div class="path">Loading summary...</div></div>`;
     }
+    if (repoSummaryStatus === "disabled") {
+      return `<div class="card arch-missing"><div class="section-title">Repo Summary</div>${controls}<div>AI summary is disabled. Open Settings -> AI to enable (optional).</div></div>`;
+    }
     if (repoSummaryStatus === "missing") {
       return `<div class="card arch-missing"><div class="section-title">Repo Summary</div>${controls}<div>Repo summary not generated yet.</div><div class="path">${esc(cmd)}</div></div>`;
+    }
+    if (repoSummaryStatus === "stale") {
+      return `<div class="card arch-missing"><div class="section-title">Repo Summary</div>${controls}<div><span class="repo-badge expiring">Outdated (repo changed)</span></div><div class="path">Click "Generate AI summary" to refresh.</div></div>`;
     }
     if (repoSummaryStatus === "error") {
       return `<div class="card arch-missing"><div class="section-title">Repo Summary</div>${controls}<div>${esc(repoSummaryError || "Failed to load repo summary.")}</div><div class="path">Run analyze, then: ${esc(cmd)}</div></div>`;
@@ -602,61 +615,81 @@
         <div class="arch-one-liner">${esc(summary.one_liner || "")}</div>
         ${bullets.length ? `<ul class="arch-bullets">${bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>` : "<div class='muted'>No bullets available.</div>"}
         ${notes.length ? `<div class="section-title">Notes</div><ul class="arch-bullets">${notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
-        <div class="path">provider: ${esc(payload.provider || "none")} | cached: ${esc(String(payload.cached))} | updated: ${esc(repoSummaryUpdatedAt || "unknown")}</div>
+        <div class="path">provider: ${esc(payload.provider || "none")} | cached: ${esc(String(payload.cached))} | updated: ${esc(payload.generated_at || repoSummaryUpdatedAt || "unknown")}</div>
       </div>
     `;
   }
 
-  async function loadRepoSummary(force) {
-    if (!force && repoSummaryStatus === "ready" && repoSummary) return;
+  async function loadRepoSummary(force, generate) {
+    const shouldGenerate = !!generate;
+    if (!force && !activeRepoHash) {
+      repoSummaryStatus = "missing";
+      repoSummary = null;
+      return;
+    }
     repoSummaryStatus = "loading";
     repoSummaryError = "";
     try {
-      let data;
-      if (aiMode === "byok") {
-        data = await callByokProxy("repo_summary", { force_regenerate: !!force });
-      } else {
-        data = await fetchJson("/api/hosted/repo_summary", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-CodeMap-Device": hostedDeviceId || "" },
-          body: JSON.stringify({ force: !!force, device_id: hostedDeviceId || "" }),
-        });
-        hostedQuotaRemaining = Number.isFinite(Number(data.remaining_quota)) ? Number(data.remaining_quota) : hostedQuotaRemaining;
+      if (!shouldGenerate) {
+        const state = await fetchJson(`/api/repo_summary?repo=${encodeURIComponent(repoDir || "")}`);
+        if (state.exists && state.repo_summary) {
+          const cachedSummary = state.repo_summary || {};
+          repoSummary = {
+            provider: String(cachedSummary.provider || ""),
+            model: String(cachedSummary.model || ""),
+            cached: true,
+            generated_at: String(cachedSummary.generated_at || ""),
+            summary: _summaryFromMarkdown(String(cachedSummary.content_markdown || "")),
+          };
+          repoSummaryUpdatedAt = String(cachedSummary.generated_at || "");
+          repoSummaryStatus = "ready";
+          return;
+        }
+        if (state.outdated) {
+          repoSummary = null;
+          repoSummaryUpdatedAt = "";
+          repoSummaryStatus = aiEnabled ? "stale" : "disabled";
+          return;
+        }
+        repoSummary = null;
+        repoSummaryUpdatedAt = "";
+        repoSummaryStatus = aiEnabled ? "missing" : "disabled";
+        return;
       }
-      hostedProvider = String(data.provider || hostedProvider || "hosted");
-      const text = String(data.summary_text || data.summary || "");
-      const lines = text.split("\n").map((x) => x.trim()).filter(Boolean);
-      const oneLiner = lines[0] ? lines[0].replace(/^\-\s*/, "") : "";
-      const bullets = lines.slice(1, 8).map((x) => x.replace(/^\-\s*/, ""));
+
+      if (!aiEnabled) {
+        repoSummary = null;
+        repoSummaryStatus = "disabled";
+        repoSummaryError = aiStatusMessage || "AI summary is disabled. Open Settings -> AI to enable (optional).";
+        return;
+      }
+
+      const data = await fetchJson(`/api/repo_summary/generate?force=${force ? "1" : "0"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_hash: activeRepoHash || "", repo: repoDir || "", force: !!force }),
+      });
+      const generated = data.repo_summary || {};
+      aiProvider = String(generated.provider || aiProvider || "");
+      aiModel = String(generated.model || aiModel || "");
       repoSummary = {
-        provider: String(data.provider || ""),
+        provider: String(generated.provider || ""),
+        model: String(generated.model || ""),
         cached: !!data.cached,
-        summary: {
-          one_liner: oneLiner,
-          bullets,
-          notes: [],
-        },
+        generated_at: String(generated.generated_at || ""),
+        summary: _summaryFromMarkdown(String(generated.content_markdown || "")),
       };
-      repoSummaryUpdatedAt = new Date().toISOString();
+      repoSummaryUpdatedAt = String(generated.generated_at || "");
       repoSummaryStatus = "ready";
     } catch (e) {
       repoSummary = null;
       repoSummaryUpdatedAt = "";
-      if (e && (e.error === "MISSING_REPO_SUMMARY" || e.error === "MISSING_ANALYSIS")) {
+      if (e && e.error === "MISSING_ANALYSIS") {
         repoSummaryStatus = "missing";
         repoSummaryError = "";
-      } else if (e && e.error === "BYOK_KEY_REQUIRED") {
-        repoSummaryStatus = "error";
-        repoSummaryError = "Add your API key to use BYOK.";
-        openByokModal();
-      } else if (e && e.error === "QUOTA_EXCEEDED") {
-        repoSummaryStatus = "error";
-        repoSummaryError = "Daily free AI limit reached. Switch to BYOK to continue.";
-        showToast(repoSummaryError, "error");
-      } else if (e && e.error === "RATE_LIMITED") {
-        repoSummaryStatus = "error";
-        repoSummaryError = "Too many AI requests. Please wait a few seconds.";
-        showToast(repoSummaryError, "error");
+      } else if (e && e.error === "AI_DISABLED") {
+        repoSummaryStatus = "disabled";
+        repoSummaryError = aiStatusMessage || "AI summary is disabled. Open Settings -> AI to enable (optional).";
       } else {
         repoSummaryStatus = "error";
         repoSummaryError = redactSecrets((e && (e.message || e.error)) || "Repo summary load failed");
@@ -767,7 +800,7 @@
     architectureViewEl.innerHTML = "<div class='card'>Loading architecture insights...</div>";
     try {
       if (!architectureCache) architectureCache = await fetchJson("/api/architecture");
-      await loadRepoSummary(false);
+      await loadRepoSummary(false, false);
       await loadRiskRadar(false);
       const arch = architectureCache.architecture_metrics || {};
       const dep = architectureCache.dependency_cycles || {};
@@ -811,7 +844,7 @@
         refreshBtn.addEventListener("click", async () => {
           const forceEl = architectureViewEl.querySelector("#repo-summary-force");
           const force = !!(forceEl && forceEl.checked);
-          await loadRepoSummary(force);
+          await loadRepoSummary(force, true);
           await loadArchitecture();
         });
       }
@@ -1982,6 +2015,42 @@
     }
   }
 
+  function bindAiSettingsControls() {
+    if (aiSettingsBtnEl) {
+      aiSettingsBtnEl.addEventListener("click", async () => {
+        await openAiSettingsModal();
+      });
+    }
+    if (aiSettingsCancelEl) {
+      aiSettingsCancelEl.addEventListener("click", () => closeAiSettingsModal());
+    }
+    if (aiSettingsSaveEl) {
+      aiSettingsSaveEl.addEventListener("click", async () => {
+        await saveAiSettings();
+      });
+    }
+    if (aiSettingsTestEl) {
+      aiSettingsTestEl.addEventListener("click", async () => {
+        await testAiSettings();
+      });
+    }
+    if (aiSettingsClearEl) {
+      aiSettingsClearEl.addEventListener("click", async () => {
+        await clearAiSettings();
+      });
+    }
+    if (aiSettingsModalEl) {
+      aiSettingsModalEl.addEventListener("click", (e) => {
+        if (e.target === aiSettingsModalEl) closeAiSettingsModal();
+      });
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && aiSettingsModalEl && !aiSettingsModalEl.classList.contains("hidden")) {
+        closeAiSettingsModal();
+      }
+    });
+  }
+
   let repoInlineBound = false;
   let repoAddInFlight = false;
   let repoAddAbortController = null;
@@ -2162,7 +2231,6 @@
     if (ghTokenEl) ghTokenEl.value = "";
     if (ghPrivateModeEl) ghPrivateModeEl.checked = false;
     updatePrivateModeIndicator();
-    if (repoOpenAfterAddEl) repoOpenAfterAddEl.checked = true;
     if (repoModalErrorEl) repoModalErrorEl.textContent = "";
     repoAddInFlight = false;
     repoAddAbortController = null;
@@ -2222,9 +2290,6 @@
 
   async function runAddRepository() {
     if (!validateRepoPanel()) return;
-    const wasActiveRepo = activeRepoHash;
-    const hadSelection = !!wasActiveRepo;
-    const openAfterAdd = !!(repoOpenAfterAddEl && repoOpenAfterAddEl.checked);
     const githubActive = repoFormGithubEl && !repoFormGithubEl.classList.contains("hidden");
 
     repoAddInFlight = true;
@@ -2250,7 +2315,7 @@
             ref,
             mode,
             display_name: displayName,
-            open_after_add: openAfterAdd,
+            open_after_add: true,
             private_mode: privateModeRequested,
           }),
           signal: repoAddAbortController.signal,
@@ -2261,7 +2326,7 @@
         data = await fetchJson("/api/repo_import/local", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ repo_path: repoPath, display_name: displayName, analyze: false, open_after_add: openAfterAdd }),
+          body: JSON.stringify({ repo_path: repoPath, display_name: displayName, analyze: false, open_after_add: true }),
           signal: repoAddAbortController.signal,
         });
       }
@@ -2274,13 +2339,8 @@
       try {
         await loadWorkspace();
         await loadRepoRegistry();
-        if (!hadSelection || openAfterAdd) {
-          if (data.repo_hash) {
-            await selectWorkspace(data.repo_hash);
-          }
-        } else if (wasActiveRepo && data.repo_hash !== wasActiveRepo) {
-          await selectWorkspace(wasActiveRepo);
-        }
+        if (data.repo_hash) await selectWorkspace(data.repo_hash);
+        setActiveTab("details");
         if (data.repo_hash && privateModeRequested) {
           showToast("Private mode enabled. Default retention set to 7 days after analysis.", "success");
         }
@@ -2435,6 +2495,13 @@
         await loadGraph();
       }
     } catch (e) {
+      const errCode = String((e && e.error) || "");
+      if (errCode === "MISSING_ANALYSIS" || errCode === "CACHE_NOT_FOUND") {
+        fileViewEl.classList.remove("muted");
+        fileViewEl.innerHTML = renderMissingAnalysisCta("Run Analyze first to load file intelligence.");
+        bindRunAnalysisNowButton();
+        return;
+      }
       fileViewEl.classList.add("muted");
       fileViewEl.textContent = redactSecrets((e && (e.error || e.message)) || "Failed to load file intelligence");
     }
@@ -2471,24 +2538,18 @@
   async function refreshSymbolAiSummary(fqn, force) {
     const key = String(fqn || "");
     if (!key) return;
+    if (!aiEnabled) {
+      showToast(aiStatusMessage || "AI summary is disabled. Open Settings -> AI to enable (optional).", "error");
+      return;
+    }
     try {
-      let data;
-      if (aiMode === "byok") {
-        data = await callByokProxy("llm_explain", { symbol: key, force_regenerate: !!force });
-      } else {
-        data = await fetchJson("/api/hosted/llm_explain", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-CodeMap-Device": hostedDeviceId || "" },
-          body: JSON.stringify({ fqn: key, force: !!force, device_id: hostedDeviceId || "" }),
-        });
-        hostedQuotaRemaining = Number.isFinite(Number(data.remaining_quota)) ? Number(data.remaining_quota) : hostedQuotaRemaining;
-      }
+      const data = await callAiEndpoint("llm_explain", { symbol: key, force: !!force });
+      aiProvider = String(data.provider || aiProvider || "");
       symbolAiSummaryCache.set(key, {
-        text: String(data.explain_text || data.summary || "").trim(),
+        text: String(data.explain_text || "").trim(),
         provider: String(data.provider || ""),
         cached: !!data.cached,
         updatedAt: String(data.updated_at || new Date().toISOString()),
-        mode: aiMode,
       });
       if (activeSymbolFqn === key) {
         symbolCache.delete(key);
@@ -2497,13 +2558,8 @@
       showToast("AI summary refreshed", "success");
     } catch (e) {
       const errCode = String((e && e.error) || "");
-      if (errCode === "BYOK_KEY_REQUIRED") {
-        showToast("Add your API key to use BYOK.", "error");
-        openByokModal();
-        return;
-      }
-      if (errCode === "QUOTA_EXCEEDED") {
-        showToast("Free quota exceeded. Switch to BYOK to continue.", "error");
+      if (errCode === "AI_DISABLED") {
+        showToast(aiStatusMessage || "AI summary is disabled. Open Settings -> AI to enable (optional).", "error");
         return;
       }
       showToast(redactSecrets((e && (e.message || e.error)) || "AI summary refresh failed"), "error");
@@ -2573,7 +2629,7 @@
             <button id="symbol-ai-refresh-btn" class="repo-btn small" type="button">Refresh AI summary</button>
             <label class="path"><input id="symbol-ai-force" type="checkbox" /> Force regenerate</label>
           </div>
-          <div class="path">AI Mode: ${esc(aiMode === "byok" ? `BYOK (${byokProvider})` : "Hosted AI (Free tier)")} ${aiSummary ? `| provider: ${esc(aiSummary.provider || "")} | cached: ${esc(String(aiSummary.cached))}` : ""}</div>
+          <div class="path">AI Mode: ${esc(aiEnabled ? `BYOK (${aiProvider || "auto"})` : "BYOK (disabled)")} ${aiSummary ? `| provider: ${esc(aiSummary.provider || "")} | cached: ${esc(String(aiSummary.cached))}` : ""}</div>
           <div>${esc(summary)}</div>
           <div id="called-by-section" class="divider"></div>
           <div class="section-title">Called by</div>
@@ -2643,6 +2699,13 @@
         await loadImpact(result.fqn || fqn);
       }
     } catch (e) {
+      const errCode = String((e && e.error) || "");
+      if (errCode === "MISSING_ANALYSIS" || errCode === "CACHE_NOT_FOUND") {
+        symbolViewEl.classList.remove("muted");
+        symbolViewEl.innerHTML = renderMissingAnalysisCta("Run Analyze first to unlock symbol intelligence.");
+        bindRunAnalysisNowButton();
+        return;
+      }
       symbolViewEl.classList.add("muted");
       symbolViewEl.textContent = redactSecrets((e && (e.error || e.message)) || "Failed to load symbol intelligence");
     }
@@ -2678,13 +2741,13 @@
   async function init() {
     bindSearchInput();
     bindWorkspaceControls();
-    bindByokModalControls();
+    bindAiSettingsControls();
     bindRepoInlineControls();
     bindDataPrivacyControls();
     bindGraphControls();
     setActiveTab("details");
     try {
-      await loadHostedHealth();
+      await loadAiStatus();
       await loadWorkspace();
       await refreshForActiveRepo();
     } catch (e) {

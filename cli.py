@@ -154,14 +154,11 @@ def _hosted_health() -> Tuple[bool, Dict[str, Any]]:
 
 
 def _resolve_ai_mode(args, default: str = "auto") -> str:
-    if bool(getattr(args, "hosted_ai", False)):
-        return "hosted"
+    _ = default
     if bool(getattr(args, "byok", False)):
         return "byok"
-    mode = str(getattr(args, "mode", default) or default).strip().lower()
-    if mode not in {"auto", "hosted", "byok"}:
-        return default
-    return mode
+    # Hosted mode is removed; keep parser compatibility but always resolve to BYOK.
+    return "byok"
 
 
 def _hosted_summary_to_structured(summary_text: str) -> Dict[str, Any]:
@@ -363,8 +360,6 @@ def api_cache_help(_args) -> int:
             "python cli.py api cache retention --repo-hash <hash> --days 30 --yes",
             "python cli.py api cache sweep --dry-run",
             "python cli.py api cache sweep --yes",
-            "python cli.py api hosted llm_explain <fqn> --repo <path> [--force]",
-            "python cli.py api hosted repo_summary --repo <path> [--force]",
         ],
     })
     return 0
@@ -1079,42 +1074,7 @@ def api_llm_explain(args) -> int:
         })
         return 1
 
-    mode = _resolve_ai_mode(args, default="auto")
     force = bool(getattr(args, "force", False) or getattr(args, "no_cache", False))
-
-    if mode in {"hosted", "auto"}:
-        hosted_health_ok, _ = _hosted_health()
-        if mode == "hosted" and not hosted_health_ok:
-            result = {
-                "ok": False,
-                "summary": "",
-                "provider": "",
-                "model": "",
-                "cached": False,
-                "error": "HOSTED_SERVER_NOT_RUNNING",
-            }
-            print_json(result)
-            _touch_repo_access_by_dir(paths["repo_dir"])
-            return 1
-
-        if hosted_health_ok:
-            _ok, hosted = _call_hosted_llm_explain(
-                repo_dir=paths["repo_dir"],
-                fqn=args.fqn,
-                force=force,
-            )
-            if hosted.get("ok"):
-                print_json(hosted)
-                _touch_repo_access_by_dir(paths["repo_dir"])
-                return 0
-            if mode == "auto" and str(hosted.get("error", "")).strip() not in {"HOSTED_SERVER_NOT_RUNNING"}:
-                print_json(hosted)
-                _touch_repo_access_by_dir(paths["repo_dir"])
-                return 1
-            if mode == "hosted":
-                print_json(hosted)
-                _touch_repo_access_by_dir(paths["repo_dir"])
-                return 1
 
     result = llm_explain_symbol(fqn=args.fqn, repo_dir=paths["repo_dir"], no_cache=force)
     print_json(result)
@@ -1145,67 +1105,7 @@ def api_repo_summary(args) -> int:
         })
         return 1
 
-    mode = _resolve_ai_mode(args, default="auto")
     force = bool(getattr(args, "force", False))
-    if mode in {"hosted", "auto"}:
-        hosted_health_ok, _ = _hosted_health()
-        if mode == "hosted" and not hosted_health_ok:
-            print_json({
-                "ok": False,
-                "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
-                "repo_hash": compute_repo_hash(repo_dir),
-                "cached": False,
-                "provider": None,
-                "summary": {},
-                "error": "HOSTED_SERVER_NOT_RUNNING",
-            })
-            return 1
-
-        if hosted_health_ok:
-            _ok, hosted = _call_hosted_repo_summary(repo_dir=repo_dir, force=force)
-            if hosted.get("ok"):
-                final_hosted = {
-                    "ok": True,
-                    "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
-                    "repo_hash": compute_repo_hash(repo_dir),
-                    "cached": bool(hosted.get("cached", False)),
-                    "provider": hosted.get("provider"),
-                    "summary": _hosted_summary_to_structured(str(hosted.get("summary", "") or "")),
-                    "error": None,
-                    "remaining_quota": hosted.get("remaining_quota"),
-                    "mode": "hosted",
-                }
-                repo_summary_path = os.path.join(cache_dir, "repo_summary.json")
-                with open(repo_summary_path, "w", encoding="utf-8") as f:
-                    json.dump(final_hosted, f, indent=2)
-                print_json(final_hosted)
-                _touch_repo_access_by_dir(repo_dir)
-                return 0
-            if mode == "auto" and str(hosted.get("error", "")).strip() not in {"HOSTED_SERVER_NOT_RUNNING"}:
-                print_json({
-                    "ok": False,
-                    "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
-                    "repo_hash": compute_repo_hash(repo_dir),
-                    "cached": False,
-                    "provider": hosted.get("provider"),
-                    "summary": {},
-                    "error": hosted.get("error") or hosted.get("message") or "HOSTED_FAILED",
-                })
-                _touch_repo_access_by_dir(repo_dir)
-                return 1
-
-            if mode == "hosted":
-                print_json({
-                    "ok": False,
-                    "repo": os.path.basename(os.path.abspath(repo_dir).rstrip("\\/")),
-                    "repo_hash": compute_repo_hash(repo_dir),
-                    "cached": False,
-                    "provider": hosted.get("provider"),
-                    "summary": {},
-                    "error": hosted.get("error") or hosted.get("message") or "HOSTED_FAILED",
-                })
-                _touch_repo_access_by_dir(repo_dir)
-                return 1
 
     result = generate_repo_summary(repo_cache_dir=cache_dir, llm_client=ai_client)
     if not result.get("ok"):
@@ -1820,33 +1720,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_api_llm_explain.add_argument("fqn", help="Fully-qualified symbol name")
     p_api_llm_explain.add_argument("--repo", required=True, help="Repository directory to analyze")
     p_api_llm_explain.add_argument("--no-cache", action="store_true", help="Bypass read-cache for this request")
-    p_api_llm_explain.add_argument("--mode", choices=["auto", "hosted", "byok"], default="auto", help="AI mode selection")
-    p_api_llm_explain.add_argument("--hosted-ai", action="store_true", help="Force hosted mode")
+    p_api_llm_explain.add_argument("--mode", choices=["byok"], default="byok", help="AI mode selection")
     p_api_llm_explain.add_argument("--byok", action="store_true", help="Force BYOK mode")
-    p_api_llm_explain.add_argument("--force", action="store_true", help="Force regenerate (hosted: bypass cache)")
+    p_api_llm_explain.add_argument("--force", action="store_true", help="Force regenerate (bypass cache)")
     p_api_llm_explain.set_defaults(func=api_llm_explain)
 
     p_api_repo_summary = api_sub.add_parser("repo_summary", help="LLM repo-level architectural summary")
     p_api_repo_summary.add_argument("--repo", required=True, help="Repository directory to summarize")
-    p_api_repo_summary.add_argument("--mode", choices=["auto", "hosted", "byok"], default="auto", help="AI mode selection")
-    p_api_repo_summary.add_argument("--hosted-ai", action="store_true", help="Force hosted mode")
+    p_api_repo_summary.add_argument("--mode", choices=["byok"], default="byok", help="AI mode selection")
     p_api_repo_summary.add_argument("--byok", action="store_true", help="Force BYOK mode")
-    p_api_repo_summary.add_argument("--force", action="store_true", help="Force regenerate (hosted: bypass cache)")
+    p_api_repo_summary.add_argument("--force", action="store_true", help="Force regenerate (bypass cache)")
     p_api_repo_summary.set_defaults(func=api_repo_summary)
-
-    p_api_hosted = api_sub.add_parser("hosted", help="Hosted AI proxy commands")
-    hosted_sub = p_api_hosted.add_subparsers(dest="hosted_command", required=True)
-
-    p_api_hosted_llm = hosted_sub.add_parser("llm_explain", help="Hosted AI explain for one symbol")
-    p_api_hosted_llm.add_argument("fqn", help="Fully-qualified symbol name")
-    p_api_hosted_llm.add_argument("--repo", required=True, help="Repository directory to analyze")
-    p_api_hosted_llm.add_argument("--force", action="store_true", help="Bypass hosted cache")
-    p_api_hosted_llm.set_defaults(func=api_hosted_llm_explain)
-
-    p_api_hosted_repo = hosted_sub.add_parser("repo_summary", help="Hosted AI repo summary")
-    p_api_hosted_repo.add_argument("--repo", required=True, help="Repository directory to summarize")
-    p_api_hosted_repo.add_argument("--force", action="store_true", help="Bypass hosted cache")
-    p_api_hosted_repo.set_defaults(func=api_hosted_repo_summary)
 
     p_api_risk_radar = api_sub.add_parser("risk_radar", help="Repo-level risk radar from cached architecture artifacts")
     p_api_risk_radar.add_argument("--repo", required=True, help="Repository directory")

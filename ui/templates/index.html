@@ -18,12 +18,8 @@
     <div class="workspace-controls">
       <select id="repo-select" class="repo-select"></select>
       <button id="add-repo-btn" class="repo-btn" type="button">+ Add repo...</button>
-      <select id="ai-mode-select" class="repo-select ai-mode-select">
-        <option value="hosted" selected>Hosted AI (Free tier)</option>
-        <option value="byok">BYOK (Use my key)</option>
-      </select>
-      <button id="byok-config-btn" class="repo-btn hidden" type="button">BYOK Settings</button>
-      <span id="ai-mode-badge" class="repo-badge">AI: Hosted AI (Free tier)</span>
+      <button id="ai-settings-btn" class="repo-btn" type="button">Settings</button>
+      <span id="ai-mode-badge" class="repo-badge">AI: BYOK (disabled)</span>
     </div>
     <div id="meta" class="meta">Loading...</div>
   </header>
@@ -68,16 +64,39 @@
         🔒 Private Repo Mode: Tokens are used only in memory; nothing is uploaded; you can delete cached data anytime.
       </div>
     </div>
-    <label class="path">
-      <input id="repo-open-after-add" type="checkbox" checked />
-      Open after add
-    </label>
     <div id="repo-modal-error" class="status"></div>
     <div class="modal-actions">
       <button id="repo-add-btn" class="repo-btn" type="button">Add repo</button>
       <button id="repo-cancel-btn" class="repo-btn" type="button">Cancel</button>
     </div>
   </section>
+  <div id="ai-settings-modal" class="confirm-modal hidden">
+    <div class="confirm-card settings-card">
+      <div class="section-title">AI Settings</div>
+      <label>Provider
+        <select id="ai-settings-provider">
+          <option value="none" selected>None</option>
+          <option value="gemini">Gemini</option>
+          <option value="groq">Groq</option>
+          <option value="xai">xAI</option>
+        </select>
+      </label>
+      <label>API key
+        <input id="ai-settings-key" type="password" placeholder="Used locally" />
+      </label>
+      <label>Model (optional)
+        <input id="ai-settings-model" type="text" placeholder="Leave empty for default" />
+      </label>
+      <label class="path"><input id="ai-settings-save-local" type="checkbox" checked /> Save locally on this machine</label>
+      <div id="ai-settings-status" class="status"></div>
+      <div class="repo-row-actions">
+        <button id="ai-settings-test" class="repo-btn" type="button">Test Key</button>
+        <button id="ai-settings-save" class="repo-btn" type="button">Save</button>
+        <button id="ai-settings-clear" class="repo-btn danger" type="button">Clear key</button>
+        <button id="ai-settings-cancel" class="repo-btn" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <main class="layout shell">
     <section class="panel">
@@ -198,34 +217,6 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
-  <div id="byok-modal" class="confirm-modal hidden">
-    <div class="confirm-card byok-card">
-      <div class="section-title">BYOK Configuration</div>
-      <div class="path">Use your own provider key. Key is used in memory only for this session.</div>
-      <div class="modal-form">
-        <label>Provider
-          <select id="byok-provider">
-            <option value="gemini" selected>gemini</option>
-            <option value="groq">groq</option>
-            <option value="xai">xai</option>
-          </select>
-        </label>
-        <label>API key
-          <input id="byok-api-key" type="password" placeholder="Enter key (never stored on disk)" />
-        </label>
-        <label class="path">
-          <input id="byok-session-only" type="checkbox" checked />
-          Save for this session only
-        </label>
-      </div>
-      <div id="byok-error" class="status"></div>
-      <div class="repo-row-actions">
-        <button id="byok-save" class="repo-btn" type="button">Save</button>
-        <button id="byok-clear" class="repo-btn danger" type="button">Clear key</button>
-        <button id="byok-cancel" class="repo-btn" type="button">Cancel</button>
-      </div>
-    </div>
-  </div>
   <div id="confirm-modal" class="confirm-modal hidden">
     <div class="confirm-card">
       <div id="confirm-title" class="section-title">Confirm action</div>

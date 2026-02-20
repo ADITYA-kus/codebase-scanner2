@@ -24,28 +24,30 @@ class TestUiPrivateModeSecurity(unittest.TestCase):
         self.assertIn("showToast(redactSecrets(", js)
         self.assertIn("repoModalErrorEl.textContent = redactSecrets(", js)
 
-    def test_byok_modal_and_password_field_exist(self):
+    def test_byok_env_mode_indicator_exists(self):
         template_path = os.path.join(PROJECT_ROOT, "ui", "templates", "index.html")
         with open(template_path, "r", encoding="utf-8") as f:
             html = f.read()
-        self.assertIn('id="ai-mode-select"', html)
-        self.assertIn('id="byok-modal"', html)
-        self.assertIn('id="byok-provider"', html)
-        self.assertIn('id="byok-api-key"', html)
-        self.assertIn('id="byok-api-key" type="password"', html)
-        self.assertIn('id="byok-session-only"', html)
-        self.assertIn('id="byok-save"', html)
-        self.assertIn('id="byok-cancel"', html)
-        self.assertIn('id="byok-clear"', html)
+        self.assertIn('id="ai-mode-badge"', html)
+        self.assertIn('id="ai-settings-btn"', html)
+        self.assertIn('id="ai-settings-modal"', html)
+        self.assertIn('id="ai-settings-provider"', html)
+        self.assertIn('id="ai-settings-key"', html)
+        self.assertIn("AI: BYOK", html)
+        self.assertNotIn("Hosted AI", html)
 
-    def test_byok_key_cleared_on_close_save_and_hosted_switch(self):
+    def test_byok_uses_local_settings_and_cached_summary_endpoints(self):
         js_path = os.path.join(PROJECT_ROOT, "ui", "static", "app.js")
         with open(js_path, "r", encoding="utf-8") as f:
             js = f.read()
-        self.assertIn("function clearByokKeyInput()", js)
-        self.assertGreaterEqual(js.count("clearByokKeyInput();"), 3)
-        self.assertIn("byokApiKey = \"\";", js)
-        self.assertIn("callByokProxy(", js)
+        self.assertIn('fetchJson("/api/settings/ai")', js)
+        self.assertIn('fetchJson("/api/settings/ai/test"', js)
+        self.assertIn('fetchJson(`/api/repo_summary?repo=', js)
+        self.assertIn('fetchJson(`/api/repo_summary/generate?force=', js)
+        self.assertIn('fetchJson(`/api/ai/${action}`', js)
+        self.assertIn("AI summary is disabled. Open Settings -> AI to enable (optional).", js)
+        self.assertNotIn("callByokProxy(", js)
+        self.assertNotIn("/api/hosted/", js)
 
 
 if __name__ == "__main__":

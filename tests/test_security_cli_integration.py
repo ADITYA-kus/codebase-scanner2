@@ -58,22 +58,18 @@ class TestCliTokenSecurity(unittest.TestCase):
             except OSError:
                 continue
 
-    def test_ui_byok_proxy_does_not_echo_or_persist_key(self):
+    def test_ui_ai_status_does_not_expose_tokens(self):
         token = "gsk_TESTTOKEN1234567890abcDEF"
-        client = TestClient(app)
-        response = client.post(
-            "/api/ui/byok_proxy",
-            json={
-                "provider": "gemini",
-                "api_key": token,
-                "action": "repo_summary",
-                "repo": "non_existing_repo_for_byok_test",
-                "force_regenerate": False,
-            },
-        )
-        self.assertIn(response.status_code, (200, 400))
-        text = response.text
-        self.assertNotIn(token, text)
+        os.environ["GROQ_API_KEY"] = token
+        try:
+            client = TestClient(app)
+            response = client.get("/api/ai/status")
+            self.assertEqual(response.status_code, 200)
+            text = response.text
+            self.assertNotIn(token, text)
+            self.assertIn('"ok":true', text.replace(" ", "").lower())
+        finally:
+            os.environ.pop("GROQ_API_KEY", None)
 
         token_bytes = token.encode("utf-8")
         for path in self._cache_files():

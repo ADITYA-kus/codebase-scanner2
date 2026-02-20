@@ -5,9 +5,11 @@ import os
 import re
 import subprocess
 import sys
+import hashlib
 from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+from urllib import request as urllib_request, error as urllib_error
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -15,14 +17,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from analysis.utils.cache_manager import (
+    compute_analysis_fingerprint,
     compute_repo_hash,
     get_cache_dir,
     list_caches as cm_list_caches,
     touch_last_accessed,
 )
 from security_utils import redact_payload, redact_secrets
-from ui.device_id import get_or_create_device_id
-from ui.hosted_ai import hosted_llm_explain, hosted_repo_summary
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -32,6 +33,79 @@ GLOBAL_CACHE_DIR = os.path.join(PROJECT_ROOT, ".codemap_cache")
 WORKSPACES_PATH = os.path.join(GLOBAL_CACHE_DIR, "workspaces.json")
 
 MISSING_CACHE_MESSAGE = "Not analyzed yet. Run: python cli.py api analyze --path <repo>"
+
+_AI_SETTINGS_MEMORY: Dict[str, Any] = {
+    "provider": "none",
+    "api_key": "",
+    "model": "",
+    "configured": False,
+    "saved_at": "",
+}
+
+
+def _user_config_dir() -> str:
+    if sys.platform.startswith("win"):
+        base = os.getenv("APPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Roaming")
+        return os.path.join(base, "codemap_ai")
+    return os.path.join(os.path.expanduser("~"), ".config", "codemap_ai")
+
+
+def _ai_settings_path() -> str:
+    return os.path.join(_user_config_dir(), "secrets.json")
+
+
+def _load_ai_settings_file() -> Dict[str, Any]:
+    path = _ai_settings_path()
+    raw = _load_json(path, {})
+    if not isinstance(raw, dict):
+        return {}
+    provider = str(raw.get("provider", "none") or "none").strip().lower()
+    if provider not in {"none", "gemini", "groq", "xai"}:
+        provider = "none"
+    return {
+        "provider": provider,
+        "api_key": str(raw.get("api_key", "") or ""),
+        "model": str(raw.get("model", "") or ""),
+        "saved_at": str(raw.get("saved_at", "") or ""),
+    }
+
+
+def _save_ai_settings_file(data: Dict[str, Any]) -> None:
+    path = _ai_settings_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    payload = {
+        "provider": str(data.get("provider", "none") or "none").strip().lower(),
+        "api_key": str(data.get("api_key", "") or ""),
+        "model": str(data.get("model", "") or ""),
+        "saved_at": _now_utc(),
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+
+def _effective_ai_settings() -> Dict[str, Any]:
+    mem = _AI_SETTINGS_MEMORY if isinstance(_AI_SETTINGS_MEMORY, dict) else {}
+    provider = str(mem.get("provider", "") or "").strip().lower()
+    api_key = str(mem.get("api_key", "") or "")
+    model = str(mem.get("model", "") or "")
+    if provider in {"gemini", "groq", "xai"} and api_key:
+        return {"provider": provider, "api_key": api_key, "model": model, "configured": True}
+
+    file_cfg = _load_ai_settings_file()
+    provider = str(file_cfg.get("provider", "none") or "none").strip().lower()
+    api_key = str(file_cfg.get("api_key", "") or "")
+    model = str(file_cfg.get("model", "") or "")
+    configured = provider in {"gemini", "groq", "xai"} and bool(api_key)
+    return {"provider": provider, "api_key": api_key, "model": model, "configured": configured}
+
+
+def _public_ai_settings() -> Dict[str, Any]:
+    cfg = _effective_ai_settings()
+    return {
+        "provider": str(cfg.get("provider", "none") or "none"),
+        "model": str(cfg.get("model", "") or ""),
+        "configured": bool(cfg.get("configured", False)),
+    }
 
 
 app = FastAPI(title="CodeMap AI UI")
@@ -381,13 +455,210 @@ def _resolve_repo_dir_from_payload(payload: Dict[str, Any]) -> Tuple[Optional[st
     return None, "NO_ACTIVE_REPO"
 
 
-def _resolve_device_id(request: Request, payload: Dict[str, Any]) -> str:
-    header_id = str(request.headers.get("X-CodeMap-Device", "") or "").strip()
-    body_id = str((payload or {}).get("device_id", "") or "").strip()
-    candidate = header_id or body_id
-    if candidate and re.match(r"^[a-zA-Z0-9._-]{8,128}$", candidate):
-        return candidate
-    return get_or_create_device_id(GLOBAL_CACHE_DIR)
+def _ai_provider_status() -> Dict[str, Any]:
+    cfg = _effective_ai_settings()
+    enabled = bool(cfg.get("configured", False))
+    provider = str(cfg.get("provider", "none") or "none")
+    model = str(cfg.get("model", "") or "")
+    return {
+        "enabled": enabled,
+        "provider": provider if enabled else "none",
+        "model": model,
+        "message": "" if enabled else "AI disabled: open Settings -> AI and configure BYOK.",
+    }
+
+
+def _ai_env_for_provider(provider: str, api_key: str, model: str = "") -> Dict[str, str]:
+    p = str(provider or "").strip().lower()
+    env = {"CODEMAP_LLM": p, "CODEMAP_ALLOW_FALLBACK": "0"}
+    if p == "gemini":
+        env["GEMINI_API_KEY"] = str(api_key or "")
+        if model:
+            env["CODEMAP_GEMINI_MODEL"] = str(model)
+    elif p == "groq":
+        env["GROQ_API_KEY"] = str(api_key or "")
+        if model:
+            env["CODEMAP_GROQ_MODEL"] = str(model)
+    elif p == "xai":
+        env["XAI_API_KEY"] = str(api_key or "")
+        if model:
+            env["CODEMAP_XAI_MODEL"] = str(model)
+    return env
+
+
+def _temporary_env(overrides: Dict[str, str]):
+    class _EnvCtx:
+        def __enter__(self_nonlocal):
+            self_nonlocal._previous = {}
+            for k, v in (overrides or {}).items():
+                key = str(k or "").strip()
+                if not key:
+                    continue
+                self_nonlocal._previous[key] = os.environ.get(key)
+                os.environ[key] = str(v or "")
+            return self_nonlocal
+
+        def __exit__(self_nonlocal, exc_type, exc_val, exc_tb):
+            for k, old in self_nonlocal._previous.items():
+                if old is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = old
+            return False
+
+    return _EnvCtx()
+
+
+def _clear_repo_summary_cache(repo_dir: str) -> None:
+    cache_dir = get_cache_dir(repo_dir)
+    llm_cache_path = os.path.join(cache_dir, "llm_cache.json")
+    llm_cache = _load_json(llm_cache_path, {})
+    if not isinstance(llm_cache, dict):
+        return
+    keys = [k for k in llm_cache.keys() if str(k).startswith("repo_summary:")]
+    if not keys:
+        return
+    for key in keys:
+        llm_cache.pop(key, None)
+    _save_json(llm_cache_path, llm_cache)
+
+
+def _analysis_version_from_cache(cache_dir: str) -> str:
+    manifest_path = os.path.join(cache_dir, "manifest.json")
+    manifest = _load_json(manifest_path, {})
+    if not isinstance(manifest, dict):
+        return ""
+    return str(manifest.get("analysis_version", "") or "")
+
+
+def _repo_summary_cache_path(cache_dir: str) -> str:
+    return os.path.join(cache_dir, "repo_summary.json")
+
+
+def _load_repo_summary_cached(cache_dir: str) -> Dict[str, Any]:
+    path = _repo_summary_cache_path(cache_dir)
+    data = _load_json(path, {})
+    return data if isinstance(data, dict) else {}
+
+
+def _summary_markdown_from_structured(summary: Dict[str, Any]) -> str:
+    if not isinstance(summary, dict):
+        return ""
+    parts: List[str] = []
+    one_liner = str(summary.get("one_liner", "") or "").strip()
+    if one_liner:
+        parts.append(one_liner)
+    bullets = summary.get("bullets", [])
+    if isinstance(bullets, list):
+        for b in bullets[:7]:
+            text = str(b or "").strip()
+            if text:
+                parts.append(f"- {text}")
+    return "\n".join(parts).strip()
+
+
+def _summary_structured_from_markdown(content_markdown: str) -> Dict[str, Any]:
+    lines = [ln.strip() for ln in str(content_markdown or "").splitlines() if ln.strip()]
+    one_liner = ""
+    bullets: List[str] = []
+    if lines:
+        first = lines[0]
+        one_liner = re.sub(r"^\-\s*", "", first).strip()
+        for ln in lines[1:8]:
+            clean = re.sub(r"^\-\s*", "", ln).strip()
+            if clean:
+                bullets.append(clean)
+    return {"one_liner": one_liner, "bullets": bullets, "notes": []}
+
+
+def _provider_test_request(provider: str, api_key: str, model: str) -> None:
+    provider = str(provider or "").strip().lower()
+    if provider == "gemini":
+        target_model = model or "gemini-2.5-flash-lite"
+        endpoint = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{target_model}:generateContent?key={api_key}"
+        )
+        body = {
+            "contents": [{"parts": [{"text": "ping"}]}],
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 16},
+        }
+        req = urllib_request.Request(
+            endpoint,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib_request.urlopen(req, timeout=20):
+            return
+    if provider == "groq":
+        target_model = model or "llama-3.1-8b-instant"
+        endpoint = "https://api.groq.com/openai/v1/chat/completions"
+        body = {
+            "model": target_model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "temperature": 0.1,
+            "max_tokens": 16,
+        }
+        req = urllib_request.Request(
+            endpoint,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            method="POST",
+        )
+        with urllib_request.urlopen(req, timeout=20):
+            return
+    if provider == "xai":
+        target_model = model or "grok-code-fast-1"
+        endpoint = "https://api.x.ai/v1/chat/completions"
+        body = {
+            "model": target_model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "temperature": 0.1,
+            "max_tokens": 16,
+        }
+        req = urllib_request.Request(
+            endpoint,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            method="POST",
+        )
+        with urllib_request.urlopen(req, timeout=20):
+            return
+    raise RuntimeError("Unsupported provider")
+
+
+def _repo_fingerprint(repo_dir: str, cache_dir: str) -> str:
+    git_dir = os.path.join(repo_dir, ".git")
+    if os.path.isdir(git_dir):
+        try:
+            proc = subprocess.run(
+                ["git", "-C", repo_dir, "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=4,
+                check=False,
+            )
+            sha = str(proc.stdout or "").strip()
+            if proc.returncode == 0 and re.fullmatch(r"[0-9a-fA-F]{40}", sha):
+                return f"git:{sha.lower()}"
+        except Exception:
+            pass
+    try:
+        fp = compute_analysis_fingerprint(repo_dir)
+        if fp:
+            return f"analysis:{fp}"
+    except Exception:
+        pass
+    parts: List[str] = []
+    for name in ("resolved_calls.json", "risk_radar.json", "project_tree.json"):
+        p = os.path.join(cache_dir, name)
+        if not os.path.exists(p):
+            parts.append(f"{name}:missing")
+            continue
+        st = os.stat(p)
+        parts.append(f"{name}:{int(st.st_mtime_ns)}:{int(st.st_size)}")
+    return "fallback:" + hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
 
 def _has_analysis_cache(ctx: Dict[str, str]) -> bool:
@@ -1287,6 +1558,109 @@ def api_architecture(repo: Optional[str] = Query(default=None)):
     }
 
 
+@app.get("/api/settings/ai")
+def api_settings_ai_get():
+    status = _ai_provider_status()
+    return {
+        "ok": True,
+        "provider": str(status.get("provider", "none") or "none"),
+        "model": str(status.get("model", "") or ""),
+        "configured": bool(status.get("enabled", False)),
+        "message": str(status.get("message", "") or ""),
+    }
+
+
+@app.post("/api/settings/ai")
+async def api_settings_ai_post(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+
+    provider = str(payload.get("provider", "none") or "none").strip().lower()
+    if provider not in {"none", "gemini", "groq", "xai"}:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_PROVIDER"})
+
+    api_key = str(payload.get("api_key", "") or "")
+    model = str(payload.get("model", "") or "").strip()
+    save_local = bool(payload.get("save_local", True))
+    current = _effective_ai_settings()
+    current_key = str(current.get("api_key", "") or "")
+    current_provider = str(current.get("provider", "none") or "none")
+
+    if provider == "none":
+        effective_key = ""
+        model = ""
+    elif api_key:
+        effective_key = api_key
+    elif provider == current_provider:
+        effective_key = current_key
+    else:
+        effective_key = ""
+
+    _AI_SETTINGS_MEMORY["provider"] = provider
+    _AI_SETTINGS_MEMORY["api_key"] = effective_key
+    _AI_SETTINGS_MEMORY["model"] = model
+    _AI_SETTINGS_MEMORY["configured"] = bool(provider in {"gemini", "groq", "xai"} and effective_key)
+    _AI_SETTINGS_MEMORY["saved_at"] = _now_utc()
+
+    if save_local:
+        _save_ai_settings_file(
+            {
+                "provider": provider,
+                "api_key": effective_key,
+                "model": model,
+            }
+        )
+
+    status = _ai_provider_status()
+    return {
+        "ok": True,
+        "provider": str(status.get("provider", "none") or "none"),
+        "model": str(status.get("model", "") or ""),
+        "configured": bool(status.get("enabled", False)),
+        "message": str(status.get("message", "") or ""),
+        "saved_local": save_local,
+    }
+
+
+@app.post("/api/settings/ai/test")
+async def api_settings_ai_test(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    provider = str(payload.get("provider", "") or "").strip().lower()
+    model = str(payload.get("model", "") or "").strip()
+    api_key = str(payload.get("api_key", "") or "")
+
+    if provider not in {"gemini", "groq", "xai"}:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_PROVIDER"})
+    if not api_key:
+        cfg = _effective_ai_settings()
+        if str(cfg.get("provider", "") or "") == provider:
+            api_key = str(cfg.get("api_key", "") or "")
+            if not model:
+                model = str(cfg.get("model", "") or "")
+    if not api_key:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "MISSING_API_KEY", "message": "API key is required."})
+
+    try:
+        _provider_test_request(provider=provider, api_key=api_key, model=model)
+        return {"ok": True, "provider": provider, "model": model, "message": "Credentials look valid."}
+    except urllib_error.HTTPError as e:
+        code = int(getattr(e, "code", 0) or 0)
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "error": f"HTTP_{code}" if code else "PROVIDER_TEST_FAILED",
+                "message": redact_secrets(str(e)),
+            },
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "PROVIDER_TEST_FAILED", "message": redact_secrets(str(e))},
+        )
+
+
 @app.get("/api/repo_summary")
 def api_repo_summary(repo: Optional[str] = Query(default=None)):
     ctx = _repo_ctx(repo) if repo else _active_repo_ctx()
@@ -1295,224 +1669,271 @@ def api_repo_summary(repo: Optional[str] = Query(default=None)):
     if not _has_analysis_cache(ctx):
         return _missing_cache_response()
 
-    path = os.path.join(ctx["cache_dir"], "repo_summary.json")
-    if not os.path.exists(path):
+    summary_path = _repo_summary_cache_path(ctx["cache_dir"])
+    current_fp = _repo_fingerprint(ctx["repo_dir"], ctx["cache_dir"])
+    current_analysis_version = _analysis_version_from_cache(ctx["cache_dir"])
+
+    if not os.path.exists(summary_path):
+        return {
+            "ok": True,
+            "exists": False,
+            "cached": False,
+            "reason": "STALE_OR_MISSING",
+            "outdated": False,
+            "fingerprint": current_fp,
+        }
+
+    cached = _load_repo_summary_cached(ctx["cache_dir"])
+    cached_fp = str(cached.get("fingerprint", "") or "")
+    cached_version = str(cached.get("analysis_version", "") or "")
+    is_fresh = bool(cached_fp and cached_fp == current_fp and cached_version == current_analysis_version)
+
+    if is_fresh:
+        return {
+            "ok": True,
+            "exists": True,
+            "cached": True,
+            "outdated": False,
+            "repo_summary": cached,
+        }
+
+    return {
+        "ok": True,
+        "exists": False,
+        "cached": False,
+        "reason": "STALE_OR_MISSING",
+        "outdated": True,
+        "fingerprint": current_fp,
+        "repo_summary": cached,
+    }
+
+
+@app.post("/api/repo_summary/generate")
+async def api_repo_summary_generate(request: Request, force: int = Query(default=0)):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    repo_dir, err = _resolve_repo_dir_from_payload(payload)
+    if err or not repo_dir:
         return JSONResponse(
-            status_code=404,
+            status_code=400,
+            content={"ok": False, "error": err or "INVALID_REPO", "message": "Provide a valid repo"},
+        )
+
+    ctx = _repo_ctx_from_dir(repo_dir)
+    if not _has_analysis_cache(ctx):
+        return _missing_cache_response()
+
+    status = _ai_provider_status()
+    if not status.get("enabled"):
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "AI_DISABLED", "message": status.get("message", "AI disabled")},
+        )
+
+    force_refresh = bool(int(force or 0)) or bool(payload.get("force", False))
+    summary_path = _repo_summary_cache_path(ctx["cache_dir"])
+    current_fp = _repo_fingerprint(ctx["repo_dir"], ctx["cache_dir"])
+    current_analysis_version = _analysis_version_from_cache(ctx["cache_dir"])
+
+    if not force_refresh and os.path.exists(summary_path):
+        cached = _load_repo_summary_cached(ctx["cache_dir"])
+        if (
+            str(cached.get("fingerprint", "") or "") == current_fp
+            and str(cached.get("analysis_version", "") or "") == current_analysis_version
+        ):
+            return {"ok": True, "cached": True, "repo_summary": cached}
+
+    if force_refresh:
+        try:
+            _clear_repo_summary_cache(repo_dir)
+        except Exception:
+            pass
+
+    provider = str(status.get("provider", "none") or "none")
+    model = str(status.get("model", "") or "")
+    api_key = str(_effective_ai_settings().get("api_key", "") or "")
+    result = _cli_json_with_input(
+        args=["repo_summary", "--repo", repo_dir, "--mode", "byok"] + (["--force"] if force_refresh else []),
+        timeout_sec=240,
+        stdin_text=None,
+        extra_env=_ai_env_for_provider(provider=provider, api_key=api_key, model=model),
+    )
+
+    if not bool(result.get("ok")):
+        return JSONResponse(
+            status_code=400,
             content={
                 "ok": False,
-                "error": "MISSING_REPO_SUMMARY",
-                "message": "Repo summary not generated yet.",
+                "error": str(result.get("error") or "REPO_SUMMARY_FAILED"),
+                "message": redact_secrets(str(result.get("message") or result.get("error") or "Repo summary failed")),
             },
         )
 
-    data = _load_json(path, {})
-    mtime = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc).isoformat()
-    return {
-        "ok": True,
-        "repo_summary": data,
-        "updated_at": mtime,
+    summary_structured = result.get("summary", {}) if isinstance(result.get("summary"), dict) else {}
+    provider_used = str(result.get("provider", "") or provider or "none")
+    model_used = model
+    repo_summary_payload = {
+        "repo_hash": ctx["repo_hash"],
+        "analysis_version": current_analysis_version,
+        "fingerprint": current_fp,
+        "provider": provider_used,
+        "model": model_used,
+        "generated_at": _now_utc(),
+        "content_markdown": _summary_markdown_from_structured(summary_structured),
     }
-
-
-@app.get("/api/hosted/health")
-def api_hosted_health():
-    provider = str(os.getenv("CODEMAP_HOSTED_PROVIDER", "gemini") or "gemini").strip().lower()
+    _save_json(summary_path, repo_summary_payload)
     try:
-        daily_quota = int(str(os.getenv("CODEMAP_HOSTED_DAILY_QUOTA", "20") or "20"))
-    except Exception:
-        daily_quota = 20
-    try:
-        min_interval = int(str(os.getenv("CODEMAP_HOSTED_MIN_INTERVAL_SEC", "5") or "5"))
-    except Exception:
-        min_interval = 5
-    return {
-        "ok": True,
-        "mode": "hosted",
-        "provider": provider,
-        "daily_quota": max(1, daily_quota),
-        "min_interval_sec": max(0, min_interval),
-        "device_id": get_or_create_device_id(GLOBAL_CACHE_DIR),
-    }
-
-
-@app.post("/api/hosted/llm_explain")
-async def api_hosted_llm_explain(request: Request):
-    body = await request.json()
-    payload = body if isinstance(body, dict) else {}
-    fqn = str(payload.get("fqn", "") or "").strip()
-    if not fqn:
-        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_FQN"})
-
-    repo_dir, err = _resolve_repo_dir_from_payload(payload)
-    if err or not repo_dir:
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "error": err or "INVALID_REPO", "message": "Provide a valid repo"},
-        )
-    force = bool(payload.get("force", False))
-    device_id = _resolve_device_id(request, payload)
-
-    result = hosted_llm_explain(
-        cache_root=GLOBAL_CACHE_DIR,
-        repo_dir=repo_dir,
-        fqn=fqn,
-        device_id=device_id,
-        force=force,
-    )
-    try:
-        touch_last_accessed(compute_repo_hash(repo_dir))
+        touch_last_accessed(ctx["repo_hash"])
     except Exception:
         pass
-    status = 200 if result.get("ok") else 400
-    return JSONResponse(status_code=status, content=redact_payload(result))
+    return {"ok": True, "cached": False, "repo_summary": repo_summary_payload}
 
 
-@app.post("/api/hosted/repo_summary")
-async def api_hosted_repo_summary(request: Request):
+@app.get("/api/ai/status")
+def api_ai_status():
+    status = _ai_provider_status()
+    return {
+        "ok": True,
+        "mode": "byok",
+        "enabled": bool(status.get("enabled")),
+        "provider": str(status.get("provider", "") or ""),
+        "message": str(status.get("message", "") or ""),
+        "model": str(status.get("model", "") or ""),
+    }
+
+
+@app.post("/api/ai/repo_summary")
+async def api_ai_repo_summary(request: Request):
     body = await request.json()
     payload = body if isinstance(body, dict) else {}
+    force = bool(payload.get("force", False))
+    repo_dir, err = _resolve_repo_dir_from_payload(payload)
+    if err or not repo_dir:
+        return JSONResponse(status_code=400, content={"ok": False, "error": err or "INVALID_REPO"})
+
+    state = api_repo_summary(repo=repo_dir)
+    if isinstance(state, JSONResponse):
+        return state
+
+    if not force and state.get("exists"):
+        summary_payload = state.get("repo_summary", {}) if isinstance(state.get("repo_summary"), dict) else {}
+        return {
+            "ok": True,
+            "mode": "byok",
+            "provider": summary_payload.get("provider"),
+            "cached": True,
+            "updated_at": summary_payload.get("generated_at", ""),
+            "summary_text": str(summary_payload.get("content_markdown", "") or ""),
+            "error": None,
+        }
+
+    status = _ai_provider_status()
+    if not status.get("enabled"):
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "AI_DISABLED", "message": status.get("message", "AI disabled")},
+        )
+
+    ctx = _repo_ctx_from_dir(repo_dir)
+    current_fp = _repo_fingerprint(ctx["repo_dir"], ctx["cache_dir"])
+    current_analysis_version = _analysis_version_from_cache(ctx["cache_dir"])
+    summary_path = _repo_summary_cache_path(ctx["cache_dir"])
+    if force:
+        try:
+            _clear_repo_summary_cache(repo_dir)
+        except Exception:
+            pass
+
+    provider = str(status.get("provider", "none") or "none")
+    model = str(status.get("model", "") or "")
+    api_key = str(_effective_ai_settings().get("api_key", "") or "")
+    result = _cli_json_with_input(
+        args=["repo_summary", "--repo", repo_dir, "--mode", "byok"] + (["--force"] if force else []),
+        timeout_sec=240,
+        stdin_text=None,
+        extra_env=_ai_env_for_provider(provider=provider, api_key=api_key, model=model),
+    )
+    if not bool(result.get("ok")):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "error": str(result.get("error") or "REPO_SUMMARY_FAILED"),
+                "message": redact_secrets(str(result.get("message") or result.get("error") or "Repo summary failed")),
+            },
+        )
+
+    summary_structured = result.get("summary", {}) if isinstance(result.get("summary"), dict) else {}
+    payload_out = {
+        "repo_hash": ctx["repo_hash"],
+        "analysis_version": current_analysis_version,
+        "fingerprint": current_fp,
+        "provider": str(result.get("provider", "") or provider or "none"),
+        "model": model,
+        "generated_at": _now_utc(),
+        "content_markdown": _summary_markdown_from_structured(summary_structured),
+    }
+    _save_json(summary_path, payload_out)
+    return {
+        "ok": True,
+        "mode": "byok",
+        "provider": payload_out.get("provider"),
+        "cached": False,
+        "updated_at": payload_out.get("generated_at"),
+        "summary_text": payload_out.get("content_markdown"),
+        "error": None,
+    }
+
+
+@app.post("/api/ai/llm_explain")
+async def api_ai_llm_explain(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    symbol = str(payload.get("symbol", "") or payload.get("fqn", "") or "").strip()
+    if not symbol:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_SYMBOL", "message": "symbol is required"})
     repo_dir, err = _resolve_repo_dir_from_payload(payload)
     if err or not repo_dir:
         return JSONResponse(
             status_code=400,
             content={"ok": False, "error": err or "INVALID_REPO", "message": "Provide a valid repo"},
         )
+
+    status = _ai_provider_status()
+    if not status.get("enabled"):
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "AI_DISABLED", "message": status.get("message", "AI disabled")},
+        )
+
     force = bool(payload.get("force", False))
-    device_id = _resolve_device_id(request, payload)
-
-    result = hosted_repo_summary(
-        cache_root=GLOBAL_CACHE_DIR,
-        repo_dir=repo_dir,
-        device_id=device_id,
-        force=force,
+    provider = str(status.get("provider", "none") or "none")
+    model = str(status.get("model", "") or "")
+    api_key = str(_effective_ai_settings().get("api_key", "") or "")
+    cli_args = ["llm_explain", symbol, "--repo", repo_dir, "--mode", "byok"]
+    if force:
+        cli_args.append("--force")
+    result = _cli_json_with_input(
+        args=cli_args,
+        timeout_sec=240,
+        stdin_text=None,
+        extra_env=_ai_env_for_provider(provider=provider, api_key=api_key, model=model),
     )
-    if result.get("ok"):
-        lines = [ln.strip() for ln in str(result.get("summary", "") or "").splitlines() if ln.strip()]
-        one_liner = lines[0].lstrip("- ").strip() if lines else ""
-        bullets = [ln.lstrip("- ").strip() for ln in lines[1:8]]
-        cache_dir = get_cache_dir(repo_dir)
-        payload_file = {
-            "ok": True,
-            "provider": result.get("provider"),
-            "cached": bool(result.get("cached", False)),
-            "summary": {"one_liner": one_liner, "bullets": bullets, "notes": []},
-            "error": None,
-        }
-        try:
-            _save_json(os.path.join(cache_dir, "repo_summary.json"), payload_file)
-            touch_last_accessed(compute_repo_hash(repo_dir))
-        except Exception:
-            pass
-    status = 200 if result.get("ok") else 400
-    return JSONResponse(status_code=status, content=redact_payload(result))
-
-
-@app.post("/api/ui/byok_proxy")
-async def api_ui_byok_proxy(request: Request):
-    body = await request.json()
-    payload = body if isinstance(body, dict) else {}
-
-    provider = str(payload.get("provider", "") or "").strip().lower()
-    action = str(payload.get("action", "") or "").strip().lower()
-    api_key = str(payload.get("api_key", "") or "").strip()
-    force_regenerate = bool(payload.get("force_regenerate", False))
-
-    if provider not in {"gemini", "groq", "xai"}:
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "mode": "byok", "error": "INVALID_PROVIDER", "message": "provider must be gemini|groq|xai"},
-        )
-    if action not in {"repo_summary", "llm_explain"}:
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "mode": "byok", "error": "INVALID_ACTION", "message": "action must be repo_summary|llm_explain"},
-        )
-    if not api_key:
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "mode": "byok", "provider": provider, "error": "BYOK_KEY_REQUIRED", "message": "Add your API key to use BYOK."},
-        )
-
-    repo_dir, err = _resolve_repo_dir_from_payload(payload)
-    if err or not repo_dir:
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "mode": "byok", "provider": provider, "error": err or "INVALID_REPO", "message": "Provide a valid repo"},
-        )
-
-    extra_env = {
-        "CODEMAP_LLM": provider,
-        "CODEMAP_ALLOW_FALLBACK": "0",
-    }
-    key_var = {
-        "gemini": "GEMINI_API_KEY",
-        "groq": "GROQ_API_KEY",
-        "xai": "XAI_API_KEY",
-    }[provider]
-    extra_env[key_var] = api_key
-
-    cli_args: List[str]
-    if action == "repo_summary":
-        cli_args = ["repo_summary", "--repo", repo_dir, "--mode", "byok"]
-        if force_regenerate:
-            cli_args.append("--force")
-    else:
-        symbol = str(payload.get("symbol", "") or "").strip()
-        if not symbol:
-            return JSONResponse(
-                status_code=400,
-                content={"ok": False, "mode": "byok", "provider": provider, "error": "INVALID_SYMBOL", "message": "symbol is required for llm_explain"},
-            )
-        cli_args = ["llm_explain", symbol, "--repo", repo_dir, "--mode", "byok"]
-        if force_regenerate:
-            cli_args.append("--force")
-
-    try:
-        result = _cli_json_with_input(args=cli_args, timeout_sec=240, stdin_text=None, extra_env=extra_env)
-    finally:
-        # Drop in-memory key references immediately.
-        api_key = ""
-        extra_env[key_var] = ""
-
-    now_iso = _now_utc()
     ok = bool(result.get("ok"))
+    response = {
+        "ok": ok,
+        "mode": "byok",
+        "provider": str(result.get("provider", "") or provider),
+        "cached": bool(result.get("cached", False)),
+        "updated_at": _now_utc(),
+        "explain_text": str(result.get("summary", "") or ""),
+        "error": None if ok else redact_secrets(str(result.get("error") or result.get("message") or "AI explain failed")),
+    }
     if ok:
         try:
             touch_last_accessed(compute_repo_hash(repo_dir))
         except Exception:
             pass
-
-    if action == "repo_summary":
-        summary_obj = result.get("summary", {}) if isinstance(result.get("summary"), dict) else {}
-        lines: List[str] = []
-        one_liner = str(summary_obj.get("one_liner", "") or "").strip()
-        if one_liner:
-            lines.append(one_liner)
-        bullets = summary_obj.get("bullets", [])
-        if isinstance(bullets, list):
-            lines.extend([str(b).strip() for b in bullets if str(b).strip()])
-        summary_text = "\n".join(lines).strip()
-        response = {
-            "ok": ok,
-            "mode": "byok",
-            "provider": str(result.get("provider", "") or provider),
-            "cached": bool(result.get("cached", False)),
-            "updated_at": now_iso,
-            "summary_text": summary_text,
-            "error": None if ok else redact_secrets(str(result.get("error") or result.get("message") or "BYOK request failed")),
-        }
-    else:
-        response = {
-            "ok": ok,
-            "mode": "byok",
-            "provider": str(result.get("provider", "") or provider),
-            "cached": bool(result.get("cached", False)),
-            "updated_at": now_iso,
-            "explain_text": str(result.get("summary", "") or ""),
-            "error": None if ok else redact_secrets(str(result.get("error") or result.get("message") or "BYOK request failed")),
-        }
-
     return JSONResponse(status_code=200 if ok else 400, content=redact_payload(response))
 
 
