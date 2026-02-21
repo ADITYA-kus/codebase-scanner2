@@ -1,0 +1,19 @@
+# CodeMap runtime cache
+.codemap_cache/
+
+# Local analysis output
+analysis/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
