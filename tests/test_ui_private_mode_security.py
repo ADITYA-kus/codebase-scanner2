@@ -33,7 +33,7 @@ class TestUiPrivateModeSecurity(unittest.TestCase):
         self.assertIn('id="ai-settings-modal"', html)
         self.assertIn('id="ai-settings-provider"', html)
         self.assertIn('id="ai-settings-key"', html)
-        self.assertIn("AI: BYOK", html)
+        self.assertIn("AI: OFF", html)
         self.assertNotIn("Hosted AI", html)
 
     def test_byok_uses_local_settings_and_cached_summary_endpoints(self):

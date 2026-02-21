@@ -100,3 +100,11 @@ G) Private Repo Support & Security
  `set GITHUB_TOKEN=...`
  or
  `echo <token> | python cli.py api analyze --github <url> --ref <ref> --mode git --token-stdin`
+
+H) Repo List Session Mode (Privacy-first)
+
+ Default UI behavior is session-only repo listing.
+ Registered repositories are shown only when explicitly added in the current UI session unless
+ "Remember repositories across sessions" is enabled in Settings.
+ Repo list persistence source is `.codemap_cache/_registry.json` (no auto-import from cache folders).
+ "Clear repository list" removes list entries only and does not delete analysis caches.

@@ -8,6 +8,7 @@ import sys
 import hashlib
 from collections import Counter
 from datetime import datetime, timezone
+from threading import RLock
 from typing import Any, Dict, List, Optional, Tuple
 from urllib import request as urllib_request, error as urllib_error
 
@@ -22,6 +23,15 @@ from analysis.utils.cache_manager import (
     get_cache_dir,
     list_caches as cm_list_caches,
     touch_last_accessed,
+    upsert_metadata,
+)
+from ui.utils.registry_manager import (
+    add_repo as registry_add_repo,
+    clear_repos as registry_clear_repos,
+    load_registry as registry_load,
+    remove_repo as registry_remove_repo,
+    save_registry_atomic as registry_save,
+    set_remember as registry_set_remember,
 )
 from security_utils import redact_payload, redact_secrets
 
@@ -30,28 +40,24 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 ANALYSIS_ROOT = os.path.join(PROJECT_ROOT, "analysis")
 DEFAULT_REPO = os.getenv("CODEMAP_UI_REPO", "testing_repo")
 GLOBAL_CACHE_DIR = os.path.join(PROJECT_ROOT, ".codemap_cache")
-WORKSPACES_PATH = os.path.join(GLOBAL_CACHE_DIR, "workspaces.json")
 
 MISSING_CACHE_MESSAGE = "Not analyzed yet. Run: python cli.py api analyze --path <repo>"
 
 _AI_SETTINGS_MEMORY: Dict[str, Any] = {
     "provider": "none",
-    "api_key": "",
     "model": "",
     "configured": False,
     "saved_at": "",
 }
+_SENSITIVE_FIELD_RE = re.compile(r"(?i)(api[_-]?key|token|authorization|bearer|basic|secret|password)")
 
-
-def _user_config_dir() -> str:
-    if sys.platform.startswith("win"):
-        base = os.getenv("APPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Roaming")
-        return os.path.join(base, "codemap_ai")
-    return os.path.join(os.path.expanduser("~"), ".config", "codemap_ai")
+_SESSION_LOCK = RLock()
+_SESSION_WORKSPACE: Dict[str, Any] = {"active_repo_hash": "", "repos": []}
+_SESSION_WORKSPACE_READY = False
 
 
 def _ai_settings_path() -> str:
-    return os.path.join(_user_config_dir(), "secrets.json")
+    return os.path.join(GLOBAL_CACHE_DIR, "_local", "ai_settings.json")
 
 
 def _load_ai_settings_file() -> Dict[str, Any]:
@@ -62,12 +68,18 @@ def _load_ai_settings_file() -> Dict[str, Any]:
     provider = str(raw.get("provider", "none") or "none").strip().lower()
     if provider not in {"none", "gemini", "groq", "xai"}:
         provider = "none"
-    return {
+    data = {
         "provider": provider,
-        "api_key": str(raw.get("api_key", "") or ""),
         "model": str(raw.get("model", "") or ""),
         "saved_at": str(raw.get("saved_at", "") or ""),
     }
+    # Defensive scrub for legacy files that may have persisted keys.
+    if "api_key" in raw or "token" in raw or "authorization" in raw:
+        try:
+            _save_ai_settings_file(data)
+        except Exception:
+            pass
+    return data
 
 
 def _save_ai_settings_file(data: Dict[str, Any]) -> None:
@@ -75,7 +87,6 @@ def _save_ai_settings_file(data: Dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     payload = {
         "provider": str(data.get("provider", "none") or "none").strip().lower(),
-        "api_key": str(data.get("api_key", "") or ""),
         "model": str(data.get("model", "") or ""),
         "saved_at": _now_utc(),
     }
@@ -86,15 +97,15 @@ def _save_ai_settings_file(data: Dict[str, Any]) -> None:
 def _effective_ai_settings() -> Dict[str, Any]:
     mem = _AI_SETTINGS_MEMORY if isinstance(_AI_SETTINGS_MEMORY, dict) else {}
     provider = str(mem.get("provider", "") or "").strip().lower()
-    api_key = str(mem.get("api_key", "") or "")
     model = str(mem.get("model", "") or "")
-    if provider in {"gemini", "groq", "xai"} and api_key:
-        return {"provider": provider, "api_key": api_key, "model": model, "configured": True}
+    if provider in {"gemini", "groq", "xai"}:
+        api_key = str(_provider_key_from_env(provider) or "")
+        return {"provider": provider, "api_key": api_key, "model": model, "configured": bool(api_key)}
 
     file_cfg = _load_ai_settings_file()
     provider = str(file_cfg.get("provider", "none") or "none").strip().lower()
-    api_key = str(file_cfg.get("api_key", "") or "")
     model = str(file_cfg.get("model", "") or "")
+    api_key = str(_provider_key_from_env(provider) or "")
     configured = provider in {"gemini", "groq", "xai"} and bool(api_key)
     return {"provider": provider, "api_key": api_key, "model": model, "configured": configured}
 
@@ -120,6 +131,20 @@ def _load_json(path: str, default: Any) -> Any:
         return default
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def _strip_sensitive_fields(payload: Any) -> Any:
+    if isinstance(payload, dict):
+        out: Dict[str, Any] = {}
+        for k, v in payload.items():
+            key = str(k or "")
+            if _SENSITIVE_FIELD_RE.search(key):
+                continue
+            out[key] = _strip_sensitive_fields(v)
+        return out
+    if isinstance(payload, list):
+        return [_strip_sensitive_fields(v) for v in payload]
+    return payload
 
 
 def _cache_dir_size(path: str) -> int:
@@ -197,11 +222,68 @@ def _ensure_ui_state(ctx: Dict[str, str]) -> Dict[str, Any]:
     return state
 
 
+def _workspace_repo_from_registry(repo: Dict[str, Any]) -> Dict[str, Any]:
+    payload = {
+        "repo_hash": str(repo.get("repo_hash", "") or ""),
+        "name": str(repo.get("display_name", "") or repo.get("name", "") or ""),
+        "path": str(repo.get("repo_path", "") or ""),
+        "source": str(repo.get("source", "filesystem") or "filesystem"),
+        "repo_url": str(repo.get("repo_url", "") or ""),
+        "ref": str(repo.get("ref", "") or ""),
+        "mode": str(repo.get("mode", "") or ""),
+        "last_opened": str(repo.get("last_opened_at", "") or ""),
+        "private_mode": bool(repo.get("private_mode", False)),
+    }
+    return _repo_entry_from_payload(payload)
+
+
+def _workspace_repo_to_registry(repo: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "repo_hash": str(repo.get("repo_hash", "") or ""),
+        "display_name": str(repo.get("name", "") or ""),
+        "source": str(repo.get("source", "filesystem") or "filesystem"),
+        "repo_path": str(repo.get("path", "") or ""),
+        "repo_url": str(repo.get("repo_url", "") or ""),
+        "ref": str(repo.get("ref", "") or ""),
+        "mode": str(repo.get("mode", "") or ""),
+        "private_mode": bool(repo.get("private_mode", False)),
+        "added_at": str(repo.get("added_at", "") or _now_utc()),
+        "last_opened_at": str(repo.get("last_opened", "") or ""),
+    }
+
+
+def _sync_session_workspace(force: bool = False) -> Dict[str, Any]:
+    global _SESSION_WORKSPACE_READY, _SESSION_WORKSPACE
+    with _SESSION_LOCK:
+        if _SESSION_WORKSPACE_READY and not force:
+            return {
+                "active_repo_hash": str(_SESSION_WORKSPACE.get("active_repo_hash", "") or ""),
+                "repos": [dict(r) for r in _SESSION_WORKSPACE.get("repos", []) if isinstance(r, dict)],
+            }
+        reg = registry_load(base_dir=GLOBAL_CACHE_DIR)
+        remember = bool(reg.get("remember_repos", False))
+        repos_raw = reg.get("repos", []) if remember else []
+        repos: List[Dict[str, Any]] = []
+        for repo in repos_raw:
+            if not isinstance(repo, dict):
+                continue
+            if not str(repo.get("repo_hash", "") or "").strip():
+                continue
+            repos.append(_workspace_repo_from_registry(repo))
+        active_repo_hash = repos[0]["repo_hash"] if repos else ""
+        _SESSION_WORKSPACE = {
+            "active_repo_hash": active_repo_hash,
+            "repos": repos,
+        }
+        _SESSION_WORKSPACE_READY = True
+        return {
+            "active_repo_hash": active_repo_hash,
+            "repos": [dict(r) for r in repos],
+        }
+
+
 def _load_workspaces() -> Dict[str, Any]:
-    ws = _load_json(WORKSPACES_PATH, None)
-    if isinstance(ws, dict) and isinstance(ws.get("repos"), list):
-        return ws
-    return {"active_repo_hash": "", "repos": []}
+    return _sync_session_workspace(force=False)
 
 
 def _cache_manifest(cache_dir: str) -> Dict[str, Any]:
@@ -239,7 +321,27 @@ def _list_cache_status() -> List[Dict[str, Any]]:
 
 
 def _save_workspaces(ws: Dict[str, Any]) -> None:
-    _save_json(WORKSPACES_PATH, ws)
+    global _SESSION_WORKSPACE_READY, _SESSION_WORKSPACE
+    with _SESSION_LOCK:
+        repos = ws.get("repos", []) if isinstance(ws, dict) else []
+        normalized_repos = [r for r in repos if isinstance(r, dict) and str(r.get("repo_hash", "") or "").strip()]
+        active = str((ws or {}).get("active_repo_hash", "") or "")
+        if active and not any(str(r.get("repo_hash", "")) == active for r in normalized_repos):
+            active = normalized_repos[0]["repo_hash"] if normalized_repos else ""
+        _SESSION_WORKSPACE = {"active_repo_hash": active, "repos": normalized_repos}
+        _SESSION_WORKSPACE_READY = True
+
+        reg = registry_load(base_dir=GLOBAL_CACHE_DIR)
+        if bool(reg.get("remember_repos", False)):
+            reg_repos = [_workspace_repo_to_registry(r) for r in normalized_repos]
+            registry_save(
+                {
+                    "version": int(reg.get("version", 1) or 1),
+                    "remember_repos": True,
+                    "repos": reg_repos,
+                },
+                base_dir=GLOBAL_CACHE_DIR,
+            )
 
 
 def _repo_entry(repo_dir: str) -> Dict[str, str]:
@@ -457,14 +559,14 @@ def _resolve_repo_dir_from_payload(payload: Dict[str, Any]) -> Tuple[Optional[st
 
 def _ai_provider_status() -> Dict[str, Any]:
     cfg = _effective_ai_settings()
-    enabled = bool(cfg.get("configured", False))
     provider = str(cfg.get("provider", "none") or "none")
+    enabled = bool(cfg.get("configured", False))
     model = str(cfg.get("model", "") or "")
     return {
         "enabled": enabled,
-        "provider": provider if enabled else "none",
+        "provider": provider if provider in {"gemini", "groq", "xai"} else "none",
         "model": model,
-        "message": "" if enabled else "AI disabled: open Settings -> AI and configure BYOK.",
+        "message": "" if enabled else "AI disabled: configure provider and send key per request or set server env key.",
     }
 
 
@@ -484,6 +586,46 @@ def _ai_env_for_provider(provider: str, api_key: str, model: str = "") -> Dict[s
         if model:
             env["CODEMAP_XAI_MODEL"] = str(model)
     return env
+
+
+def _provider_key_env_name(provider: str) -> str:
+    p = str(provider or "").strip().lower()
+    if p == "gemini":
+        return "GEMINI_API_KEY"
+    if p == "groq":
+        return "GROQ_API_KEY"
+    if p == "xai":
+        return "XAI_API_KEY"
+    return ""
+
+
+def _provider_key_from_env(provider: str) -> str:
+    env_name = _provider_key_env_name(provider)
+    if not env_name:
+        return ""
+    return str(os.getenv(env_name, "") or "").strip()
+
+
+def _get_llm_key_from_request(
+    request: Request,
+    payload: Optional[Dict[str, Any]],
+    provider: str,
+) -> str:
+    data = payload if isinstance(payload, dict) else {}
+    header_candidates = [
+        str(request.headers.get("X-CodeMap-LLM-Key", "") or "").strip(),
+        str(request.headers.get("X-CodeMap-AI-Key", "") or "").strip(),
+    ]
+    provider_env = _provider_key_env_name(provider)
+    if provider_env:
+        header_candidates.append(str(request.headers.get(f"X-CodeMap-{provider_env}", "") or "").strip())
+    for candidate in header_candidates:
+        if candidate:
+            return candidate
+    body_key = str(data.get("api_key", "") or "").strip()
+    if body_key:
+        return body_key
+    return _provider_key_from_env(provider)
 
 
 def _temporary_env(overrides: Dict[str, str]):
@@ -509,20 +651,6 @@ def _temporary_env(overrides: Dict[str, str]):
     return _EnvCtx()
 
 
-def _clear_repo_summary_cache(repo_dir: str) -> None:
-    cache_dir = get_cache_dir(repo_dir)
-    llm_cache_path = os.path.join(cache_dir, "llm_cache.json")
-    llm_cache = _load_json(llm_cache_path, {})
-    if not isinstance(llm_cache, dict):
-        return
-    keys = [k for k in llm_cache.keys() if str(k).startswith("repo_summary:")]
-    if not keys:
-        return
-    for key in keys:
-        llm_cache.pop(key, None)
-    _save_json(llm_cache_path, llm_cache)
-
-
 def _analysis_version_from_cache(cache_dir: str) -> str:
     manifest_path = os.path.join(cache_dir, "manifest.json")
     manifest = _load_json(manifest_path, {})
@@ -531,14 +659,43 @@ def _analysis_version_from_cache(cache_dir: str) -> str:
     return str(manifest.get("analysis_version", "") or "")
 
 
+def _ai_cache_root(cache_dir: str) -> str:
+    return os.path.join(cache_dir, "ai")
+
+
 def _repo_summary_cache_path(cache_dir: str) -> str:
-    return os.path.join(cache_dir, "repo_summary.json")
+    return os.path.join(_ai_cache_root(cache_dir), "repo_summary.json")
+
+
+def _safe_symbol_cache_key(fqn: str) -> str:
+    base = re.sub(r"[^A-Za-z0-9._-]+", "_", str(fqn or "")).strip("._-")
+    if not base:
+        base = "symbol"
+    digest = hashlib.sha256(str(fqn or "").encode("utf-8")).hexdigest()[:12]
+    return f"{base[:80]}_{digest}.json"
+
+
+def _symbol_summary_cache_path(cache_dir: str, fqn: str) -> str:
+    return os.path.join(_ai_cache_root(cache_dir), "symbols", _safe_symbol_cache_key(fqn))
 
 
 def _load_repo_summary_cached(cache_dir: str) -> Dict[str, Any]:
     path = _repo_summary_cache_path(cache_dir)
     data = _load_json(path, {})
     return data if isinstance(data, dict) else {}
+
+
+def _load_symbol_summary_cached(cache_dir: str, fqn: str) -> Dict[str, Any]:
+    path = _symbol_summary_cache_path(cache_dir, fqn)
+    data = _load_json(path, {})
+    return data if isinstance(data, dict) else {}
+
+
+def _record_ai_fingerprint_source(repo_hash: str, fingerprint: str) -> None:
+    try:
+        upsert_metadata(repo_hash, ai_fingerprint_source=str(fingerprint or ""))
+    except Exception:
+        pass
 
 
 def _summary_markdown_from_structured(summary: Dict[str, Any]) -> str:
@@ -709,7 +866,6 @@ def _repo_registry_data() -> List[Dict[str, Any]]:
     repos = ws.get("repos", []) if isinstance(ws, dict) else []
     status_by_hash = {str(s.get("repo_hash", "")): s for s in _list_cache_status()}
     items: List[Dict[str, Any]] = []
-    seen = set()
 
     for repo in repos:
         if not isinstance(repo, dict):
@@ -718,7 +874,6 @@ def _repo_registry_data() -> List[Dict[str, Any]]:
         repo_hash = entry["repo_hash"]
         if not repo_hash:
             continue
-        seen.add(repo_hash)
         status = status_by_hash.get(repo_hash, {})
         has_map = status.get("has", {}) if isinstance(status.get("has"), dict) else {}
         has_analysis = bool(has_map.get("explain") and has_map.get("resolved_calls"))
@@ -739,32 +894,6 @@ def _repo_registry_data() -> List[Dict[str, Any]]:
                 "retention": status.get("retention", {}),
                 "private_mode": bool(status.get("private_mode", False) or entry.get("private_mode", False)),
                 "analyze_command": _repo_analyze_command(entry),
-            }
-        )
-
-    for repo_hash, status in status_by_hash.items():
-        if not repo_hash or repo_hash in seen:
-            continue
-        repo_path = str(status.get("repo_path", "") or "")
-        source = str(status.get("source", "filesystem") or "filesystem")
-        has_map = status.get("has", {}) if isinstance(status.get("has"), dict) else {}
-        items.append(
-            {
-                "repo_hash": repo_hash,
-                "name": os.path.basename(repo_path.rstrip("\\/")) or repo_hash,
-                "source": source,
-                "repo_path": repo_path,
-                "repo_url": status.get("repo_url", ""),
-                "ref": status.get("ref", ""),
-                "mode": "",
-                "cache_dir": status.get("cache_dir"),
-                "workspace_dir": status.get("workspace_dir", ""),
-                "has_analysis": bool(has_map.get("explain") and has_map.get("resolved_calls")),
-                "last_updated": status.get("last_updated"),
-                "size_bytes": int(status.get("size_bytes", 0)),
-                "retention": status.get("retention", {}),
-                "private_mode": bool(status.get("private_mode", False)),
-                "analyze_command": f"python cli.py api analyze --path {repo_path}",
             }
         )
 
@@ -961,8 +1090,6 @@ def api_workspace():
     for repo in ws.get("repos", []):
         if isinstance(repo, dict):
             normalized_repos.append(_repo_entry_from_payload(repo))
-    ws["repos"] = normalized_repos
-    _save_workspaces(ws)
     return {
         "ok": True,
         "repos": normalized_repos,
@@ -978,6 +1105,184 @@ def api_repo_registry():
         "active_repo_hash": ws.get("active_repo_hash", ""),
         "repos": _repo_registry_data(),
     }
+
+
+def _registry_public_payload() -> Dict[str, Any]:
+    reg = registry_load(base_dir=GLOBAL_CACHE_DIR)
+    repos = reg.get("repos", []) if isinstance(reg.get("repos"), list) else []
+    safe_repos = []
+    for repo in repos:
+        if not isinstance(repo, dict):
+            continue
+        safe_repos.append(
+            {
+                "repo_hash": str(repo.get("repo_hash", "") or ""),
+                "display_name": str(repo.get("display_name", "") or ""),
+                "source": str(repo.get("source", "filesystem") or "filesystem"),
+                "repo_path": str(repo.get("repo_path", "") or ""),
+                "repo_url": str(repo.get("repo_url", "") or ""),
+                "ref": str(repo.get("ref", "") or ""),
+                "mode": str(repo.get("mode", "") or ""),
+                "added_at": str(repo.get("added_at", "") or ""),
+                "last_opened_at": str(repo.get("last_opened_at", "") or ""),
+                "private_mode": bool(repo.get("private_mode", False)),
+            }
+        )
+    ws = _ensure_default_workspace()
+    payload = {
+        "ok": True,
+        "version": int(reg.get("version", 1) or 1),
+        "remember_repos": bool(reg.get("remember_repos", False)),
+        "repos": safe_repos,
+        "session_repos": [dict(r) for r in ws.get("repos", []) if isinstance(r, dict)],
+        "active_repo_hash": str(ws.get("active_repo_hash", "") or ""),
+    }
+    return _strip_sensitive_fields(payload)
+
+
+@app.get("/api/registry")
+def api_registry_get():
+    return _registry_public_payload()
+
+
+@app.post("/api/registry/settings")
+async def api_registry_settings(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    remember = bool(payload.get("remember_repos", False))
+    reg = registry_set_remember(remember, base_dir=GLOBAL_CACHE_DIR)
+    if remember:
+        _sync_session_workspace(force=True)
+    else:
+        _save_workspaces({"active_repo_hash": "", "repos": []})
+    return {
+        "ok": True,
+        "remember_repos": bool(reg.get("remember_repos", False)),
+    }
+
+
+@app.post("/api/registry/repos/add")
+async def api_registry_repos_add(request: Request):
+    from analysis.utils.repo_fetcher import normalize_github_url, resolve_workspace_paths
+
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    source = str(payload.get("source", "filesystem") or "filesystem").strip().lower()
+    display_name = str(payload.get("display_name", "") or "").strip()
+    open_after_add = bool(payload.get("open_after_add", True))
+    private_mode = bool(payload.get("private_mode", False))
+    remember = bool(registry_load(base_dir=GLOBAL_CACHE_DIR).get("remember_repos", False))
+
+    if source == "github":
+        repo_url = str(payload.get("repo_url", "") or "").strip()
+        ref = str(payload.get("ref", "") or "").strip() or "main"
+        mode = str(payload.get("mode", "") or "zip").strip().lower() or "zip"
+        if not repo_url:
+            return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_GITHUB_URL"})
+        if mode not in {"zip", "git"}:
+            return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_MODE"})
+        try:
+            normalized_url = normalize_github_url(repo_url)
+            ws_paths = resolve_workspace_paths(normalized_url, ref, mode)
+        except Exception as e:
+            return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_GITHUB_URL", "message": redact_secrets(str(e))})
+        repo_path = str(ws_paths.get("repo_dir", "") or "")
+        entry = _repo_entry_from_payload(
+            {
+                "path": repo_path,
+                "name": display_name or ws_paths.get("repo_name", "") or os.path.basename(repo_path.rstrip("\\/")) or repo_path,
+                "source": "github",
+                "repo_url": normalized_url,
+                "ref": ref,
+                "mode": mode,
+                "private_mode": private_mode,
+            }
+        )
+    else:
+        repo_path = str(payload.get("repo_path", "") or "").strip()
+        if not repo_path:
+            return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_PATH"})
+        resolved = _resolve_repo_dir(repo_path)
+        if not os.path.isdir(resolved):
+            return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_PATH"})
+        entry = _repo_entry_from_payload(
+            {
+                "path": resolved,
+                "name": display_name or os.path.basename(resolved.rstrip("\\/")) or resolved,
+                "source": "filesystem",
+                "private_mode": private_mode,
+            }
+        )
+
+    ws = _load_workspaces()
+    repos = ws.get("repos", []) if isinstance(ws.get("repos"), list) else []
+    existing = next((r for r in repos if isinstance(r, dict) and str(r.get("repo_hash", "")) == str(entry.get("repo_hash", ""))), None)
+    if existing:
+        existing.update(entry)
+        existing["last_opened"] = _now_utc()
+    else:
+        repos.append(entry)
+    ws["repos"] = repos
+    if open_after_add or not str(ws.get("active_repo_hash", "") or ""):
+        ws["active_repo_hash"] = str(entry.get("repo_hash", "") or "")
+    _save_workspaces(ws)
+
+    if remember:
+        registry_add_repo(
+            {
+                "repo_hash": entry.get("repo_hash", ""),
+                "display_name": entry.get("name", ""),
+                "source": entry.get("source", "filesystem"),
+                "repo_path": entry.get("path", ""),
+                "repo_url": entry.get("repo_url", ""),
+                "ref": entry.get("ref", ""),
+                "mode": entry.get("mode", ""),
+                "private_mode": bool(entry.get("private_mode", False)),
+                "added_at": _now_utc(),
+                "last_opened_at": _now_utc(),
+            },
+            base_dir=GLOBAL_CACHE_DIR,
+        )
+    return {
+        "ok": True,
+        "repo": entry,
+        "repo_hash": entry.get("repo_hash", ""),
+        "persisted": remember,
+    }
+
+
+@app.post("/api/registry/repos/remove")
+async def api_registry_repos_remove(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    repo_hash = str(payload.get("repo_hash", "") or "").strip()
+    if not repo_hash:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_REPO_HASH"})
+
+    ws = _load_workspaces()
+    repos = ws.get("repos", []) if isinstance(ws.get("repos"), list) else []
+    ws["repos"] = [r for r in repos if not (isinstance(r, dict) and str(r.get("repo_hash", "")) == repo_hash)]
+    if str(ws.get("active_repo_hash", "") or "") == repo_hash:
+        ws["active_repo_hash"] = ws["repos"][0]["repo_hash"] if ws["repos"] else ""
+    _save_workspaces(ws)
+
+    remember = bool(registry_load(base_dir=GLOBAL_CACHE_DIR).get("remember_repos", False))
+    if remember:
+        registry_remove_repo(repo_hash, base_dir=GLOBAL_CACHE_DIR)
+    return {"ok": True, "repo_hash": repo_hash, "persisted": remember}
+
+
+@app.post("/api/registry/repos/clear")
+async def api_registry_repos_clear(request: Request):
+    body = await request.json()
+    payload = body if isinstance(body, dict) else {}
+    session_only = bool(payload.get("session_only", False))
+    ws = {"active_repo_hash": "", "repos": []}
+    _save_workspaces(ws)
+    remember = bool(registry_load(base_dir=GLOBAL_CACHE_DIR).get("remember_repos", False))
+    if remember and not session_only:
+        registry_clear_repos(base_dir=GLOBAL_CACHE_DIR)
+    return {"ok": True, "remember_repos": remember, "session_only": session_only}
 
 
 @app.get("/api/cache/list")
@@ -1451,6 +1756,8 @@ async def api_workspace_remove(request: Request):
     if str(ws.get("active_repo_hash", "") or "") == repo_hash:
         ws["active_repo_hash"] = ws["repos"][0]["repo_hash"] if ws["repos"] else ""
     _save_workspaces(ws)
+    if bool(registry_load(base_dir=GLOBAL_CACHE_DIR).get("remember_repos", False)):
+        registry_remove_repo(repo_hash, base_dir=GLOBAL_CACHE_DIR)
     return {"ok": True}
 
 
@@ -1579,34 +1886,20 @@ async def api_settings_ai_post(request: Request):
     if provider not in {"none", "gemini", "groq", "xai"}:
         return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_PROVIDER"})
 
-    api_key = str(payload.get("api_key", "") or "")
     model = str(payload.get("model", "") or "").strip()
     save_local = bool(payload.get("save_local", True))
-    current = _effective_ai_settings()
-    current_key = str(current.get("api_key", "") or "")
-    current_provider = str(current.get("provider", "none") or "none")
-
     if provider == "none":
-        effective_key = ""
         model = ""
-    elif api_key:
-        effective_key = api_key
-    elif provider == current_provider:
-        effective_key = current_key
-    else:
-        effective_key = ""
 
     _AI_SETTINGS_MEMORY["provider"] = provider
-    _AI_SETTINGS_MEMORY["api_key"] = effective_key
     _AI_SETTINGS_MEMORY["model"] = model
-    _AI_SETTINGS_MEMORY["configured"] = bool(provider in {"gemini", "groq", "xai"} and effective_key)
+    _AI_SETTINGS_MEMORY["configured"] = bool(provider in {"gemini", "groq", "xai"} and _provider_key_from_env(provider))
     _AI_SETTINGS_MEMORY["saved_at"] = _now_utc()
 
     if save_local:
         _save_ai_settings_file(
             {
                 "provider": provider,
-                "api_key": effective_key,
                 "model": model,
             }
         )
@@ -1628,16 +1921,14 @@ async def api_settings_ai_test(request: Request):
     payload = body if isinstance(body, dict) else {}
     provider = str(payload.get("provider", "") or "").strip().lower()
     model = str(payload.get("model", "") or "").strip()
-    api_key = str(payload.get("api_key", "") or "")
+    api_key = _get_llm_key_from_request(request=request, payload=payload, provider=provider)
 
     if provider not in {"gemini", "groq", "xai"}:
         return JSONResponse(status_code=400, content={"ok": False, "error": "INVALID_PROVIDER"})
-    if not api_key:
+    if not model:
         cfg = _effective_ai_settings()
         if str(cfg.get("provider", "") or "") == provider:
-            api_key = str(cfg.get("api_key", "") or "")
-            if not model:
-                model = str(cfg.get("model", "") or "")
+            model = str(cfg.get("model", "") or "")
     if not api_key:
         return JSONResponse(status_code=400, content={"ok": False, "error": "MISSING_API_KEY", "message": "API key is required."})
 
@@ -1651,13 +1942,13 @@ async def api_settings_ai_test(request: Request):
             content={
                 "ok": False,
                 "error": f"HTTP_{code}" if code else "PROVIDER_TEST_FAILED",
-                "message": redact_secrets(str(e)),
+                "message": redact_secrets(str(e), extra_secrets=[api_key]),
             },
         )
     except Exception as e:
         return JSONResponse(
             status_code=400,
-            content={"ok": False, "error": "PROVIDER_TEST_FAILED", "message": redact_secrets(str(e))},
+            content={"ok": False, "error": "PROVIDER_TEST_FAILED", "message": redact_secrets(str(e), extra_secrets=[api_key])},
         )
 
 
@@ -1671,6 +1962,7 @@ def api_repo_summary(repo: Optional[str] = Query(default=None)):
 
     summary_path = _repo_summary_cache_path(ctx["cache_dir"])
     current_fp = _repo_fingerprint(ctx["repo_dir"], ctx["cache_dir"])
+    _record_ai_fingerprint_source(ctx["repo_hash"], current_fp)
     current_analysis_version = _analysis_version_from_cache(ctx["cache_dir"])
 
     if not os.path.exists(summary_path):
@@ -1681,6 +1973,7 @@ def api_repo_summary(repo: Optional[str] = Query(default=None)):
             "reason": "STALE_OR_MISSING",
             "outdated": False,
             "fingerprint": current_fp,
+            "message": "No cached summary for current analysis. Click Regenerate.",
         }
 
     cached = _load_repo_summary_cached(ctx["cache_dir"])
@@ -1705,6 +1998,7 @@ def api_repo_summary(repo: Optional[str] = Query(default=None)):
         "outdated": True,
         "fingerprint": current_fp,
         "repo_summary": cached,
+        "message": "No cached summary for current analysis. Click Regenerate.",
     }
 
 
@@ -1722,17 +2016,23 @@ async def api_repo_summary_generate(request: Request, force: int = Query(default
     ctx = _repo_ctx_from_dir(repo_dir)
     if not _has_analysis_cache(ctx):
         return _missing_cache_response()
+    try:
+        touch_last_accessed(ctx["repo_hash"])
+    except Exception:
+        pass
 
     status = _ai_provider_status()
-    if not status.get("enabled"):
+    provider = str(status.get("provider", "none") or "none")
+    if provider not in {"gemini", "groq", "xai"}:
         return JSONResponse(
             status_code=400,
-            content={"ok": False, "error": "AI_DISABLED", "message": status.get("message", "AI disabled")},
+            content={"ok": False, "error": "AI_DISABLED", "message": "AI disabled: select provider in Settings."},
         )
 
     force_refresh = bool(int(force or 0)) or bool(payload.get("force", False))
     summary_path = _repo_summary_cache_path(ctx["cache_dir"])
     current_fp = _repo_fingerprint(ctx["repo_dir"], ctx["cache_dir"])
+    _record_ai_fingerprint_source(ctx["repo_hash"], current_fp)
     current_analysis_version = _analysis_version_from_cache(ctx["cache_dir"])
 
     if not force_refresh and os.path.exists(summary_path):
@@ -1743,15 +2043,13 @@ async def api_repo_summary_generate(request: Request, force: int = Query(default
         ):
             return {"ok": True, "cached": True, "repo_summary": cached}
 
-    if force_refresh:
-        try:
-            _clear_repo_summary_cache(repo_dir)
-        except Exception:
-            pass
-
-    provider = str(status.get("provider", "none") or "none")
     model = str(status.get("model", "") or "")
-    api_key = str(_effective_ai_settings().get("api_key", "") or "")
+    api_key = _get_llm_key_from_request(request=request, payload=payload, provider=provider)
+    if not api_key:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "MISSING_API_KEY", "message": "Provide API key via X-CodeMap-LLM-Key header or server env."},
+        )
     result = _cli_json_with_input(
         args=["repo_summary", "--repo", repo_dir, "--mode", "byok"] + (["--force"] if force_refresh else []),
         timeout_sec=240,
@@ -1765,7 +2063,7 @@ async def api_repo_summary_generate(request: Request, force: int = Query(default
             content={
                 "ok": False,
                 "error": str(result.get("error") or "REPO_SUMMARY_FAILED"),
-                "message": redact_secrets(str(result.get("message") or result.get("error") or "Repo summary failed")),
+                "message": redact_secrets(str(result.get("message") or result.get("error") or "Repo summary failed"), extra_secrets=[api_key]),
             },
         )
 
@@ -1778,15 +2076,17 @@ async def api_repo_summary_generate(request: Request, force: int = Query(default
         "fingerprint": current_fp,
         "provider": provider_used,
         "model": model_used,
+        "cached_at": _now_utc(),
         "generated_at": _now_utc(),
         "content_markdown": _summary_markdown_from_structured(summary_structured),
     }
     _save_json(summary_path, repo_summary_payload)
+    api_key = ""
     try:
         touch_last_accessed(ctx["repo_hash"])
     except Exception:
         pass
-    return {"ok": True, "cached": False, "repo_summary": repo_summary_payload}
+    return redact_payload({"ok": True, "cached": False, "repo_summary": repo_summary_payload})
 
 
 @app.get("/api/ai/status")
@@ -1802,11 +2102,30 @@ def api_ai_status():
     }
 
 
+@app.get("/api/hosted/health")
+def api_hosted_health():
+    provider = str(os.getenv("CODEMAP_HOSTED_PROVIDER", "gemini") or "gemini").strip().lower()
+    configured = {
+        "gemini": bool(str(os.getenv("GEMINI_API_KEY", "") or "").strip()),
+        "groq": bool(str(os.getenv("GROQ_API_KEY", "") or "").strip()),
+        "xai": bool(str(os.getenv("XAI_API_KEY", "") or "").strip()),
+    }
+    return {
+        "ok": True,
+        "provider": provider,
+        "configured": bool(configured.get(provider, False)),
+        "gemini_configured": configured["gemini"],
+        "groq_configured": configured["groq"],
+        "xai_configured": configured["xai"],
+    }
+
+
 @app.post("/api/ai/repo_summary")
 async def api_ai_repo_summary(request: Request):
     body = await request.json()
     payload = body if isinstance(body, dict) else {}
     force = bool(payload.get("force", False))
+    regenerate = bool(payload.get("regenerate", False)) or force
     repo_dir, err = _resolve_repo_dir_from_payload(payload)
     if err or not repo_dir:
         return JSONResponse(status_code=400, content={"ok": False, "error": err or "INVALID_REPO"})
@@ -1815,38 +2134,57 @@ async def api_ai_repo_summary(request: Request):
     if isinstance(state, JSONResponse):
         return state
 
-    if not force and state.get("exists"):
+    if not regenerate:
         summary_payload = state.get("repo_summary", {}) if isinstance(state.get("repo_summary"), dict) else {}
+        if state.get("exists") and summary_payload:
+            return {
+                "ok": True,
+                "mode": "byok",
+                "provider": summary_payload.get("provider"),
+                "cached": True,
+                "exists": True,
+                "updated_at": summary_payload.get("cached_at") or summary_payload.get("generated_at", ""),
+                "summary_text": str(summary_payload.get("content_markdown", "") or ""),
+                "error": None,
+            }
         return {
             "ok": True,
             "mode": "byok",
-            "provider": summary_payload.get("provider"),
-            "cached": True,
-            "updated_at": summary_payload.get("generated_at", ""),
-            "summary_text": str(summary_payload.get("content_markdown", "") or ""),
+            "provider": "",
+            "cached": False,
+            "exists": False,
+            "stale": bool(state.get("outdated", False)),
+            "updated_at": "",
+            "summary_text": "",
             "error": None,
+            "message": str(state.get("message") or "No cached summary for current analysis. Click Regenerate."),
         }
 
     status = _ai_provider_status()
-    if not status.get("enabled"):
+    provider = str(status.get("provider", "none") or "none")
+    if provider not in {"gemini", "groq", "xai"}:
         return JSONResponse(
             status_code=400,
-            content={"ok": False, "error": "AI_DISABLED", "message": status.get("message", "AI disabled")},
+            content={"ok": False, "error": "AI_DISABLED", "message": "AI disabled: select provider in Settings."},
         )
 
     ctx = _repo_ctx_from_dir(repo_dir)
+    try:
+        touch_last_accessed(ctx["repo_hash"])
+    except Exception:
+        pass
     current_fp = _repo_fingerprint(ctx["repo_dir"], ctx["cache_dir"])
+    _record_ai_fingerprint_source(ctx["repo_hash"], current_fp)
     current_analysis_version = _analysis_version_from_cache(ctx["cache_dir"])
     summary_path = _repo_summary_cache_path(ctx["cache_dir"])
-    if force:
-        try:
-            _clear_repo_summary_cache(repo_dir)
-        except Exception:
-            pass
 
-    provider = str(status.get("provider", "none") or "none")
     model = str(status.get("model", "") or "")
-    api_key = str(_effective_ai_settings().get("api_key", "") or "")
+    api_key = _get_llm_key_from_request(request=request, payload=payload, provider=provider)
+    if not api_key:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "MISSING_API_KEY", "message": "Add your API key to use BYOK."},
+        )
     result = _cli_json_with_input(
         args=["repo_summary", "--repo", repo_dir, "--mode", "byok"] + (["--force"] if force else []),
         timeout_sec=240,
@@ -1859,7 +2197,7 @@ async def api_ai_repo_summary(request: Request):
             content={
                 "ok": False,
                 "error": str(result.get("error") or "REPO_SUMMARY_FAILED"),
-                "message": redact_secrets(str(result.get("message") or result.get("error") or "Repo summary failed")),
+                "message": redact_secrets(str(result.get("message") or result.get("error") or "Repo summary failed"), extra_secrets=[api_key]),
             },
         )
 
@@ -1870,19 +2208,21 @@ async def api_ai_repo_summary(request: Request):
         "fingerprint": current_fp,
         "provider": str(result.get("provider", "") or provider or "none"),
         "model": model,
+        "cached_at": _now_utc(),
         "generated_at": _now_utc(),
         "content_markdown": _summary_markdown_from_structured(summary_structured),
     }
     _save_json(summary_path, payload_out)
-    return {
+    api_key = ""
+    return redact_payload({
         "ok": True,
         "mode": "byok",
         "provider": payload_out.get("provider"),
-        "cached": False,
-        "updated_at": payload_out.get("generated_at"),
+        "cached": bool(result.get("cached", False)),
+        "updated_at": payload_out.get("cached_at") or payload_out.get("generated_at"),
         "summary_text": payload_out.get("content_markdown"),
         "error": None,
-    }
+    })
 
 
 @app.post("/api/ai/llm_explain")
@@ -1899,17 +2239,72 @@ async def api_ai_llm_explain(request: Request):
             content={"ok": False, "error": err or "INVALID_REPO", "message": "Provide a valid repo"},
         )
 
-    status = _ai_provider_status()
-    if not status.get("enabled"):
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "error": "AI_DISABLED", "message": status.get("message", "AI disabled")},
-        )
+    ctx = _repo_ctx_from_dir(repo_dir)
+    if not _has_analysis_cache(ctx):
+        return _missing_cache_response()
+    try:
+        touch_last_accessed(ctx["repo_hash"])
+    except Exception:
+        pass
+
+    current_fp = _repo_fingerprint(ctx["repo_dir"], ctx["cache_dir"])
+    _record_ai_fingerprint_source(ctx["repo_hash"], current_fp)
+    current_analysis_version = _analysis_version_from_cache(ctx["cache_dir"])
+    cache_path = _symbol_summary_cache_path(ctx["cache_dir"], symbol)
+    cached_entry = _load_symbol_summary_cached(ctx["cache_dir"], symbol)
+    cached_is_fresh = bool(
+        isinstance(cached_entry, dict)
+        and str(cached_entry.get("fqn", "") or "") == symbol
+        and str(cached_entry.get("fingerprint", "") or "") == current_fp
+        and str(cached_entry.get("analysis_version", "") or "") == current_analysis_version
+        and str(cached_entry.get("summary", "") or "").strip()
+    )
 
     force = bool(payload.get("force", False))
+    regenerate = bool(payload.get("regenerate", False)) or force
+    if not regenerate:
+        if cached_is_fresh:
+            return {
+                "ok": True,
+                "mode": "byok",
+                "provider": str(cached_entry.get("provider", "") or ""),
+                "model": str(cached_entry.get("model", "") or ""),
+                "cached": True,
+                "exists": True,
+                "stale": False,
+                "updated_at": str(cached_entry.get("cached_at", "") or ""),
+                "explain_text": str(cached_entry.get("summary", "") or ""),
+                "error": None,
+            }
+        return {
+            "ok": True,
+            "mode": "byok",
+            "provider": "",
+            "model": "",
+            "cached": False,
+            "exists": False,
+            "stale": bool(cached_entry),
+            "updated_at": "",
+            "explain_text": "",
+            "error": None,
+            "message": "No cached summary for current analysis. Click Regenerate.",
+        }
+
+    status = _ai_provider_status()
     provider = str(status.get("provider", "none") or "none")
+    if provider not in {"gemini", "groq", "xai"}:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "AI_DISABLED", "message": "AI disabled: select provider in Settings."},
+        )
+
     model = str(status.get("model", "") or "")
-    api_key = str(_effective_ai_settings().get("api_key", "") or "")
+    api_key = _get_llm_key_from_request(request=request, payload=payload, provider=provider)
+    if not api_key:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "MISSING_API_KEY", "message": "Add your API key to use BYOK."},
+        )
     cli_args = ["llm_explain", symbol, "--repo", repo_dir, "--mode", "byok"]
     if force:
         cli_args.append("--force")
@@ -1920,21 +2315,51 @@ async def api_ai_llm_explain(request: Request):
         extra_env=_ai_env_for_provider(provider=provider, api_key=api_key, model=model),
     )
     ok = bool(result.get("ok"))
-    response = {
-        "ok": ok,
-        "mode": "byok",
-        "provider": str(result.get("provider", "") or provider),
-        "cached": bool(result.get("cached", False)),
-        "updated_at": _now_utc(),
-        "explain_text": str(result.get("summary", "") or ""),
-        "error": None if ok else redact_secrets(str(result.get("error") or result.get("message") or "AI explain failed")),
+    if not ok:
+        return JSONResponse(
+            status_code=400,
+            content=redact_payload(
+                {
+                    "ok": False,
+                    "mode": "byok",
+                    "error": redact_secrets(str(result.get("error") or result.get("message") or "AI explain failed"), extra_secrets=[api_key]),
+                    "message": redact_secrets(str(result.get("message") or result.get("error") or "AI explain failed"), extra_secrets=[api_key]),
+                }
+            ),
+        )
+
+    provider_used = str(result.get("provider", "") or provider)
+    model_used = str(result.get("model", "") or model)
+    summary_text = str(result.get("summary", "") or "").strip()
+    symbol_payload = {
+        "repo_hash": ctx["repo_hash"],
+        "fqn": symbol,
+        "analysis_version": current_analysis_version,
+        "fingerprint": current_fp,
+        "provider": provider_used,
+        "model": model_used,
+        "cached_at": _now_utc(),
+        "summary": summary_text,
     }
-    if ok:
-        try:
-            touch_last_accessed(compute_repo_hash(repo_dir))
-        except Exception:
-            pass
-    return JSONResponse(status_code=200 if ok else 400, content=redact_payload(response))
+    _save_json(cache_path, symbol_payload)
+    api_key = ""
+    try:
+        touch_last_accessed(compute_repo_hash(repo_dir))
+    except Exception:
+        pass
+    response = {
+        "ok": True,
+        "mode": "byok",
+        "provider": provider_used,
+        "model": model_used,
+        "cached": bool(result.get("cached", False)),
+        "exists": True,
+        "stale": False,
+        "updated_at": symbol_payload["cached_at"],
+        "explain_text": summary_text,
+        "error": None,
+    }
+    return JSONResponse(status_code=200, content=redact_payload(response))
 
 
 @app.get("/api/risk_radar")
