@@ -19,7 +19,8 @@
       <select id="repo-select" class="repo-select"></select>
       <button id="add-repo-btn" class="repo-btn" type="button">+ Add repo...</button>
       <button id="ai-settings-btn" class="repo-btn" type="button">Settings</button>
-      <span id="ai-mode-badge" class="repo-badge">AI: BYOK (disabled)</span>
+      <span id="repo-list-mode-pill" class="repo-badge">Session Mode</span>
+      <span id="ai-mode-badge" class="repo-badge">AI: OFF</span>
     </div>
     <div id="meta" class="meta">Loading...</div>
   </header>
@@ -73,6 +74,16 @@
   <div id="ai-settings-modal" class="confirm-modal hidden">
     <div class="confirm-card settings-card">
       <div class="section-title">AI Settings</div>
+      <div class="path">General</div>
+      <label class="path">
+        <input id="ai-settings-remember-repos" type="checkbox" />
+        Remember repositories across sessions
+      </label>
+      <div class="repo-row-actions">
+        <button id="ai-settings-clear-repos" class="repo-btn danger" type="button">Clear repository list</button>
+      </div>
+      <div class="divider"></div>
+      <div class="path">Provider</div>
       <label>Provider
         <select id="ai-settings-provider">
           <option value="none" selected>None</option>
@@ -104,13 +115,14 @@
       <div id="tree-status" class="status"></div>
       <div id="repo-list" class="card">
         <div class="section-title">Repositories</div>
-        <div id="repo-list-content" class="content muted">Loading repositories...</div>
+        <div id="repo-list-content" class="content muted">No repositories added yet. Add a local path or GitHub repo to begin.</div>
       </div>
       <div id="tree" class="tree"></div>
       <div class="divider"></div>
       <div id="data-privacy" class="card">
         <div class="section-title">Data &amp; Privacy</div>
         <div id="privacy-summary" class="path">Loading data retention...</div>
+        <div id="privacy-repo-list-mode" class="path">Repository list: Session-only</div>
         <div id="privacy-private-banner" class="privacy-warning hidden">Private repo mode: caches auto-expire in 7 days unless you change retention.</div>
         <div id="privacy-expiring" class="content muted"></div>
       <div class="privacy-controls">
@@ -140,6 +152,7 @@
         </label>
         <div id="auto-clean-note" class="path hidden">Removing from UI will also delete local cache.</div>
         <div class="path">Your analysis data is stored locally under .codemap_cache. You can delete it anytime.</div>
+        <div class="path">API keys are never saved to disk. BYOK keys live only in memory for a single request.</div>
         <div class="path">Retention cleanup runs locally; nothing is uploaded.</div>
         <div id="privacy-result" class="content muted"></div>
       </div>
